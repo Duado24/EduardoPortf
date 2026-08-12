@@ -19,25 +19,25 @@ export const Contact = () => (
           edjvc24@gmail.com
         </a>
         <a
-          href="https://github.com/edjvc24"
+          href="https://github.com/Duado24"
           className="text-blue-400 hover:text-white transition-colors font-mono underline"
           target="_blank" rel="noopener noreferrer"
         >
           GitHub
         </a>
         <a
-          href="https://linkedin.com/in/edjvc24"
+          href="https://www.linkedin.com/in/edvico24"
           className="text-blue-400 hover:text-white transition-colors font-mono underline"
           target="_blank" rel="noopener noreferrer"
         >
           LinkedIn
         </a>
         <a
-          href="https://twitter.com/edjvc24"
+          href="https://app.joinhandshake.com/profiles/sw6j2w"
           className="text-blue-400 hover:text-white transition-colors font-mono underline"
           target="_blank" rel="noopener noreferrer"
         >
-          Twitter
+          Handshake
         </a>
       </div>
     </div>
