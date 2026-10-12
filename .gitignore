@@ -13,6 +13,15 @@ dist-ssr
 *.local
 
 .env
+.env.*
+!.env.example
+
+# Private input bundle: archives contain credentials and institutional data.
+references/portfolio_codex_context/GPT_Ref/
+
+# Local verification artifacts
+playwright-report/
+test-results/
 
 # Editor directories and files
 .vscode/*

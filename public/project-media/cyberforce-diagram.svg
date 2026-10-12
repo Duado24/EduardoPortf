@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title description">
+  <title id="title">CyberForce infrastructure preparation: conceptual responsibilities</title>
+  <desc id="description">In-progress preparation across database systems, Nginx web infrastructure, and NFS. Shared responsibilities include Linux administration, networking, service baselining, access controls, troubleshooting, and system hardening. This is a responsibility map from the supplied portfolio brief.</desc>
+  <style>
+    text { font-family: Arial, sans-serif; fill: #f3ebe1; }
+    .meta { font-family: monospace; font-size: 15px; letter-spacing: 1.6px; fill: #c2b2a9; }
+    .muted { fill: #c2b2a9; font-size: 19px; }
+    .label { font-size: 26px; }
+    .item { fill: #dbccc0; font-size: 19px; }
+    .mono { font-family: monospace; font-size: 16px; fill: #c2b2a9; }
+  </style>
+  <rect width="1280" height="720" fill="#130f10"/>
+  <text x="72" y="77" class="meta">DOE CYBERFORCE / PREPARATION SCOPE</text>
+  <circle cx="1046" cy="71" r="5" fill="#dc8079"/>
+  <text x="1062" y="77" class="mono">In progress</text>
+  <text x="72" y="143" font-size="42" letter-spacing="-1">Infrastructure preparation</text>
+  <text x="72" y="185" class="muted">Conceptual responsibilities from the supplied project brief</text>
+  <g fill="#211719" stroke="#80645e" stroke-width="1">
+    <rect x="72" y="243" width="356" height="211" rx="4"/>
+    <rect x="462" y="243" width="356" height="211" rx="4"/>
+    <rect x="852" y="243" width="356" height="211" rx="4"/>
+  </g>
+  <text x="100" y="282" class="meta">01 / DATABASE</text>
+  <text x="100" y="335" class="label">Database systems</text>
+  <text x="100" y="380" class="item">Administration</text>
+  <text x="100" y="412" class="item">Service baselining</text>
+  <text x="490" y="282" class="meta">02 / WEB</text>
+  <text x="490" y="335" class="label">Nginx infrastructure</text>
+  <text x="490" y="380" class="item">Access controls</text>
+  <text x="490" y="412" class="item">Troubleshooting</text>
+  <text x="880" y="282" class="meta">03 / NFS</text>
+  <text x="880" y="335" class="label">NFS infrastructure</text>
+  <text x="880" y="380" class="item">Access controls</text>
+  <text x="880" y="412" class="item">Troubleshooting</text>
+  <rect x="72" y="488" width="1136" height="130" rx="4" fill="#211719" stroke="#80645e"/>
+  <text x="100" y="528" class="meta">SHARED ADMINISTRATION RESPONSIBILITIES</text>
+  <text x="100" y="576" font-size="24">Linux administration</text>
+  <text x="444" y="576" font-size="24">Networking</text>
+  <text x="756" y="576" font-size="24">System hardening</text>
+  <text x="72" y="667" class="mono">Responsibility map · source-grounded project scope</text>
+</svg>

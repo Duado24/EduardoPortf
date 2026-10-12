@@ -1,12 +1,66 @@
-# React + Vite
+# Eduardo Villanueva portfolio
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A complete React/Vite portfolio organized around a persistent particle sculpture.
+Home, About, Projects, Journey, Skills, and Contact are all active, with distinct
+particle targets and accessible HTML navigation. AutoCanv is the default featured
+project. Project visuals come from the supplied source and are labeled honestly.
 
-Currently, two official plugins are available:
+## Develop locally
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Use Node 24 (`nvm use`), then:
 
-## Expanding the ESLint configuration
+```sh
+npm ci
+npm run dev
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Open `http://localhost:5173/EduardoPortf/` (or the URL printed by Vite). Destinations
+around the globe and the ordinary navigation both work. Each section supports a
+direct hash such as `#projects`; browser Back/Forward and Escape work too.
+Projects show one selected project. Click its visual to inspect it at larger size.
+Journey has five selectable nodes. Contact includes a source-verified résumé PDF.
+
+```sh
+npm test
+npm run lint
+npm run build
+npm run preview
+```
+
+## Layout and animation
+
+The current desktop layout follows the user's fixed-viewport requirement: no
+document or internal scrolling. Short and zoomed windows use reduced content
+and compact selectors. Touch phones use document scrolling for inner content.
+The suggestion to replace desktop states with scrollable inner pages is a
+separate design decision; it has not silently replaced the fixed requirement.
+
+WebGL is preferred; an animated Canvas2D renderer handles unavailable GPUs,
+context loss, low capability hints, and data saving. Both renderers rotate Home
+and physically morph between targets, pause in hidden tabs, and reuse point
+arrays. Reduced motion defaults to static shapes. The user can explicitly
+choose Enable motion for the current visit. Pause motion remains available.
+
+See [the active brief](references/PORTFOLIO_BRIEF.md),
+[architecture](docs/IMPLEMENTATION_PLAN.md), and
+[verification](docs/PROTOTYPE_REVIEW.md).
+
+## Factual content and media
+
+AutoCanv is a personal project/prototype. Ensign templates are Professional Work;
+CyberForce is In Progress. No project adoption, achievements, certifications,
+competition results, or metrics are invented. Offline demonstration content is
+identified in the actual AutoCanv capture. The generator shows its built-in
+sample. The template image is a supplied formatter pattern preview rather than
+a live professional course. The CyberForce diagram is a conceptual responsibility
+map, not an asserted deployment topology. Asset provenance is in
+[public/project-media](public/project-media/README.md).
+
+Private reference archives and credentials remain excluded from public files,
+bundles, and deployment artifacts. No live Canvas operations are required.
+
+## Hosting
+
+The retained GitHub Pages base is `/EduardoPortf/`. Pull requests validate the
+build; Pages deploys pushes to `main`. This work changes the local repository;
+no commit, push, or deployment was performed.
