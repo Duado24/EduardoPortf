@@ -16,31 +16,48 @@ import {
   MAX_PARTICLES,
   MOBILE_PARTICLES,
   smoothProgress,
-  snapshotMorph,
-  snapshotStyle,
   visualState,
 } from './shapeTargets.js'
+import { sampleMorph, sampleMorphValues } from './aerostaticTransition.js'
 
 const vertexShader = /* glsl */ `
   attribute vec3 aTarget;
   attribute vec2 aSourceStyle;
   attribute vec2 aTargetStyle;
+  attribute vec2 aSourceDepth;
+  attribute vec2 aTargetDepth;
+  attribute float aDelay;
+  attribute float aSeed;
   uniform float uMorph;
+  uniform float uDirection;
   uniform float uRotation;
-  uniform float uGlobeWeight;
+  uniform float uPitch;
   uniform float uPointSize;
   varying float vOpacity;
   varying float vAccent;
+  varying float vProject;
 
   void main() {
-    vec3 p = mix(position, aTarget, uMorph);
+    float m = uMorph;
+    if (uDirection > 0.5) m = smoothstep(aDelay, min(0.98, aDelay + 0.60), uMorph);
+    if (uDirection < -0.5) m = 1.0 - smoothstep(aDelay, min(0.98, aDelay + 0.60), 1.0 - uMorph);
+    vec3 p = mix(position, aTarget, m);
+    if (abs(uDirection) > 0.5) {
+      float sweep = sin(3.14159265359 * m);
+      float phase = aSeed * 6.28318530718;
+      p += sweep * vec3(0.025 * (0.4 + 0.6 * sin(phase)), 0.012 * cos(phase), 0.018 * sin(phase));
+    }
     float c = cos(uRotation);
     float s = sin(uRotation);
     p = vec3(p.x * c + p.z * s, p.y, p.z * c - p.x * s);
-    vec2 style = mix(aSourceStyle, aTargetStyle, uMorph);
+    p = vec3(p.x, p.y * cos(uPitch) - p.z * sin(uPitch), p.y * sin(uPitch) + p.z * cos(uPitch));
+    vec2 style = mix(aSourceStyle, aTargetStyle, m);
+    vec2 depthWeights = mix(aSourceDepth, aTargetDepth, m);
     float depth = 0.35 + 0.65 * smoothstep(-0.35, 0.85, p.z);
-    vOpacity = style.x * mix(1.0, depth, uGlobeWeight);
+    float projectDepth = 0.20 + 0.80 * smoothstep(-0.52, 0.52, p.z);
+    vOpacity = style.x * (1.0 + (depth - 1.0) * depthWeights.x + (projectDepth - 1.0) * depthWeights.y);
     vAccent = style.y;
+    vProject = depthWeights.y;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
     gl_PointSize = uPointSize * mix(1.0, 1.2, vAccent);
   }
@@ -51,11 +68,12 @@ const fragmentShader = /* glsl */ `
   uniform vec3 uAccentColor;
   varying float vOpacity;
   varying float vAccent;
+  varying float vProject;
 
   void main() {
     float radius = length(gl_PointCoord - vec2(0.5));
     if (radius > 0.5) discard;
-    float coverage = 1.0 - smoothstep(0.25, 0.5, radius);
+    float coverage = 1.0 - smoothstep(mix(0.25, 0.40, vProject), 0.5, radius);
     gl_FragColor = vec4(mix(uBaseColor, uAccentColor, vAccent), coverage * vOpacity);
     #include <colorspace_fragment>
   }
@@ -70,6 +88,14 @@ export function createParticleRenderer({ canvas, container, section, motionPause
   const target = targets[initialState].positions.slice()
   const sourceStyle = targets[initialState].style.slice()
   const targetStyle = targets[initialState].style.slice()
+  const sourceDepth = new Float32Array(count * 2)
+  const targetDepth = new Float32Array(count * 2)
+  const delays = targets.projects.delays
+  const seeds = Float32Array.from({ length: count }, (_, i) => i * 0.61803398875 % 1)
+  for (let i = 0; i < count; i++) {
+    sourceDepth[i * 2] = targetDepth[i * 2] = initialState === 'home' ? 1 : 0
+    sourceDepth[i * 2 + 1] = targetDepth[i * 2 + 1] = initialState === 'projects' ? 1 : 0
+  }
 
   // Software-backed WebGL2 is permitted. Measured frame cost determines whether
   // to reduce quality or use the lighter animated Canvas renderer.
@@ -88,6 +114,10 @@ export function createParticleRenderer({ canvas, container, section, motionPause
   geometry.setAttribute('aTarget', new BufferAttribute(target, 3).setUsage(DynamicDrawUsage))
   geometry.setAttribute('aSourceStyle', new BufferAttribute(sourceStyle, 2).setUsage(DynamicDrawUsage))
   geometry.setAttribute('aTargetStyle', new BufferAttribute(targetStyle, 2).setUsage(DynamicDrawUsage))
+  geometry.setAttribute('aSourceDepth', new BufferAttribute(sourceDepth, 2).setUsage(DynamicDrawUsage))
+  geometry.setAttribute('aTargetDepth', new BufferAttribute(targetDepth, 2).setUsage(DynamicDrawUsage))
+  geometry.setAttribute('aDelay', new BufferAttribute(delays, 1))
+  geometry.setAttribute('aSeed', new BufferAttribute(seeds, 1))
 
   const material = new ShaderMaterial({
     vertexShader,
@@ -98,8 +128,9 @@ export function createParticleRenderer({ canvas, container, section, motionPause
     toneMapped: false,
     uniforms: {
       uMorph: { value: 1 },
-      uRotation: { value: 0 },
-      uGlobeWeight: { value: initialState === 'home' ? 1 : 0 },
+      uDirection: { value: 0 },
+      uRotation: { value: initialState === 'projects' ? 0.35 : 0 },
+      uPitch: { value: initialState === 'projects' ? 0.035 : 0 },
       uPointSize: { value: 2 },
       uBaseColor: { value: new Color('#ece1d3') },
       uAccentColor: { value: new Color('#dc8079') },
@@ -124,10 +155,10 @@ export function createParticleRenderer({ canvas, container, section, motionPause
   let transitionDuration = duration
   let transitioning = false
   let sourceRotation = 0
-  let targetRotation = 0
+  let targetRotation = initialState === 'projects' ? 0.35 : 0
   let lastGlobeRotation = 0
-  let sourceGlobe = initialState === 'home' ? 1 : 0
-  let targetGlobe = sourceGlobe
+  let direction = 0
+  let globePair = false
   let projectWeight = initialState === 'projects' ? 1 : 0
   let sourceProject = projectWeight
   let targetProject = projectWeight
@@ -139,16 +170,21 @@ export function createParticleRenderer({ canvas, container, section, motionPause
   let frameInterval = 1000 / 30
   let pointDpr = 1
   let pointBaseCss = mobile ? 1.9 : 2.15
+  let placementPointScale = 1
+  let placementProgressBase = 0
+  let projectIdleElapsed = 0
+  let renderSize = 1
 
   function canAnimate() {
-    return !disposed && !document.hidden && inViewport && !paused && !reduced &&
-      (transitioning || currentState === 'home' || currentState === 'projects')
+    return !disposed && !document.hidden && inViewport && !paused &&
+      (transitioning || !reduced && (currentState === 'home' || currentState === 'projects'))
   }
 
   function positionProject() {
     points.rotation.z = Math.sin(projectPhase * 0.72) * 0.018 * projectWeight
     points.position.y = (Math.sin(projectPhase * 1.05) * 0.024 + Math.sin(projectPhase * 0.43) * 0.009) * projectWeight
-    material.uniforms.uPointSize.value = (pointBaseCss + (1.5 - pointBaseCss) * projectWeight) * pointDpr
+    material.uniforms.uPitch.value = (0.035 + Math.sin(projectPhase * 0.61) * 0.01) * projectWeight
+    material.uniforms.uPointSize.value = (pointBaseCss + (1.5 - pointBaseCss) * projectWeight) * pointDpr * placementPointScale
   }
 
   function draw() {
@@ -157,12 +193,13 @@ export function createParticleRenderer({ canvas, container, section, motionPause
 
   function finishTransition() {
     material.uniforms.uMorph.value = 1
-    material.uniforms.uGlobeWeight.value = targetGlobe
     material.uniforms.uRotation.value = targetRotation
     projectWeight = targetProject
+    direction = 0
+    material.uniforms.uDirection.value = 0
+    placementPointScale = onMorphFrame?.(1) ?? 1
     positionProject()
     transitioning = false
-    onMorphFrame?.(1)
   }
 
   function schedule() {
@@ -179,19 +216,25 @@ export function createParticleRenderer({ canvas, container, section, motionPause
     }
     lastFrame = timestamp
     const delta = Math.min(difference, 100)
-    if (projectWeight || targetProject) projectPhase += delta / 1000
+    if (!reduced && (projectWeight || targetProject)) projectPhase += delta / 1000
     if (transitioning) {
       elapsed += delta
-      const progress = smoothProgress(elapsed / transitionDuration)
-      material.uniforms.uMorph.value = progress
-      material.uniforms.uGlobeWeight.value = sourceGlobe + (targetGlobe - sourceGlobe) * progress
-      material.uniforms.uRotation.value = sourceRotation + (targetRotation - sourceRotation) * progress
-      projectWeight = sourceProject + (targetProject - sourceProject) * progress
-      onMorphFrame?.(progress)
+      const raw = Math.min(1, elapsed / transitionDuration)
+      const progress = smoothProgress(raw)
+      material.uniforms.uMorph.value = direction ? raw : progress
+      const rotationProgress = direction ? smoothProgress((raw - 0.10) / 0.80) : progress
+      const momentum = direction > 0 ? HOME_ROTATION_SPEED * transitionDuration / 1000 * raw * (1 - raw) ** 2 : 0
+      material.uniforms.uRotation.value = sourceRotation + (targetRotation - sourceRotation) * rotationProgress + momentum
+      const idleProgress = direction > 0 ? smoothProgress((raw - 0.66) / 0.34) : direction < 0 ? smoothProgress(raw / 0.34) : progress
+      projectWeight = sourceProject + (targetProject - sourceProject) * idleProgress
+      placementPointScale = onMorphFrame?.(placementProgressBase + (1 - placementProgressBase) * raw) ?? 1
       if (elapsed >= transitionDuration) finishTransition()
     } else if (currentState === 'home') {
       material.uniforms.uRotation.value += delta / 1000 * HOME_ROTATION_SPEED
       lastGlobeRotation = material.uniforms.uRotation.value
+    } else if (currentState === 'projects') {
+      projectIdleElapsed += delta
+      material.uniforms.uRotation.value = targetRotation + Math.sin(projectPhase * 0.37) * 0.02 * smoothProgress(projectIdleElapsed / 600)
     }
     positionProject()
 
@@ -229,7 +272,8 @@ export function createParticleRenderer({ canvas, container, section, motionPause
     const narrow = window.matchMedia('(max-width: 760px)').matches
     const dpr = Math.min(window.devicePixelRatio || 1, narrow ? 1 : 1.25)
     renderer.setPixelRatio(dpr)
-    renderer.setSize(Math.round(width), Math.round(height), false)
+    renderSize = Math.round(width)
+    renderer.setSize(renderSize, Math.round(height), false)
     const aspect = width / height
     const halfHeight = Math.max(1.2, 1.2 / aspect)
     camera.left = -halfHeight * aspect
@@ -250,25 +294,35 @@ export function createParticleRenderer({ canvas, container, section, motionPause
     const nextState = visualState(nextSection)
     if (nextState === currentState && !transitioning) return
     const uniforms = material.uniforms
-    snapshotMorph(source, target, uniforms.uMorph.value, 0, source)
-    snapshotStyle(sourceStyle, targetStyle, uniforms.uMorph.value, sourceStyle)
+    sampleMorph(source, target, uniforms.uMorph.value, delays, direction, source)
+    sampleMorphValues(sourceStyle, targetStyle, uniforms.uMorph.value, delays, direction, 2, sourceStyle)
+    sampleMorphValues(sourceDepth, targetDepth, uniforms.uMorph.value, delays, direction, 2, sourceDepth)
+    globePair = (currentState === 'home' && nextState === 'projects') || (currentState === 'projects' && nextState === 'home')
+    direction = !reduced && globePair ? nextState === 'projects' ? 1 : -1 : 0
     target.set(targets[nextState].positions)
     targetStyle.set(targets[nextState].style)
-    for (const name of ['position', 'aTarget', 'aSourceStyle', 'aTargetStyle']) geometry.attributes[name].needsUpdate = true
-    sourceGlobe = uniforms.uGlobeWeight.value
-    targetGlobe = nextState === 'home' ? 1 : 0
+    for (let i = 0; i < count; i++) {
+      targetDepth[i * 2] = nextState === 'home' ? 1 : 0
+      targetDepth[i * 2 + 1] = nextState === 'projects' ? 1 : 0
+    }
+    for (const name of ['position', 'aTarget', 'aSourceStyle', 'aTargetStyle', 'aSourceDepth', 'aTargetDepth']) geometry.attributes[name].needsUpdate = true
     sourceProject = projectWeight
     targetProject = nextState === 'projects' ? 1 : 0
     sourceRotation = Math.atan2(Math.sin(uniforms.uRotation.value), Math.cos(uniforms.uRotation.value))
     uniforms.uRotation.value = sourceRotation
-    if (currentState === 'home') lastGlobeRotation = sourceRotation
-    targetRotation = nextState === 'home' ? lastGlobeRotation : 0
+    if (currentState === 'home' && !transitioning) lastGlobeRotation = sourceRotation
+    const destinationRotation = nextState === 'home' ? lastGlobeRotation : nextState === 'projects' ? 0.35 : 0
+    targetRotation = sourceRotation + Math.atan2(Math.sin(destinationRotation - sourceRotation), Math.cos(destinationRotation - sourceRotation))
+    uniforms.uDirection.value = direction
     uniforms.uMorph.value = 0
     currentState = nextState
     elapsed = 0
-    transitionDuration = durationOverride ?? duration
+    placementProgressBase = 0
+    projectIdleElapsed = 0
+    transitionDuration = reduced && globePair ? 220 : durationOverride ?? (globePair ? mobile ? 1200 : 2000 : duration)
     transitioning = true
-    if (paused || reduced) finishTransition()
+    placementPointScale = onMorphFrame?.(0) ?? 1
+    if (paused || reduced && !globePair) finishTransition()
     draw()
     resetAnimationClock()
   }
@@ -277,7 +331,24 @@ export function createParticleRenderer({ canvas, container, section, motionPause
     if (disposed) return
     paused = nextPaused
     reduced = nextReduced
-    if ((paused || reduced) && transitioning) finishTransition()
+    if (paused && transitioning) finishTransition()
+    else if (reduced && transitioning) {
+      if (globePair) {
+        placementProgressBase += (1 - placementProgressBase) * Math.min(1, elapsed / transitionDuration)
+        const uniforms = material.uniforms
+        sampleMorph(source, target, uniforms.uMorph.value, delays, direction, source)
+        sampleMorphValues(sourceStyle, targetStyle, uniforms.uMorph.value, delays, direction, 2, sourceStyle)
+        sampleMorphValues(sourceDepth, targetDepth, uniforms.uMorph.value, delays, direction, 2, sourceDepth)
+        for (const name of ['position', 'aSourceStyle', 'aSourceDepth']) geometry.attributes[name].needsUpdate = true
+        sourceRotation = uniforms.uRotation.value
+        sourceProject = projectWeight
+        uniforms.uMorph.value = 0
+        uniforms.uDirection.value = 0
+        direction = 0
+        elapsed = 0
+        transitionDuration = 220
+      } else finishTransition()
+    }
     draw()
     resetAnimationClock()
   }
@@ -331,5 +402,5 @@ export function createParticleRenderer({ canvas, container, section, motionPause
   resize()
   schedule()
 
-  return { setSection, setMotionPreferences, destroy }
+  return { setSection, setMotionPreferences, destroy, getRenderSize: () => renderSize }
 }

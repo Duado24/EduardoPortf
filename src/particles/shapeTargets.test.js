@@ -67,7 +67,7 @@ test('all six states have deterministic finite targets at desktop and fallback c
     assert.equal(visualState(state.toUpperCase()), state)
     assert.equal(desktop[state].positions.length, 5600 * 3)
     assert.equal(desktop[state].style.length, 5600 * 2)
-    assert.deepEqual(desktop[state].positions.slice(0, 900 * 3), fallback[state].positions)
+    if (state !== 'projects') assert.deepEqual(desktop[state].positions.slice(0, 900 * 3), fallback[state].positions)
     assert.ok(desktop[state].positions.every(Number.isFinite))
     assert.ok(desktop[state].positions.every((value) => Math.abs(value) < 1.1))
     assert.ok(desktop[state].style.every((value) => value >= 0 && value <= 1))
@@ -75,13 +75,21 @@ test('all six states have deterministic finite targets at desktop and fallback c
   assert.equal(visualState('unknown'), 'home')
 })
 
-test('the supplied balloon design survives the smallest animated Canvas particle budget', () => {
-  const positions = createShapeTargets(900).projects.positions
-  assert.deepEqual(Array.from(positions), Array.from(Float32Array.from(balloonSamples.positions.slice(0, 900 * 3))))
-  const groups = new Set(balloonSamples.groups.slice(0, 900))
-  const paths = new Set(balloonSamples.shapeIds.slice(0, 900))
-  assert.equal(groups.size, Object.keys(balloonSamples.groupNames).length)
-  assert.equal(paths.size, new Set(balloonSamples.shapeIds).size)
-  assert.ok(positions.some((value, index) => index % 3 === 1 && value > 0.9), 'The envelope crown is present.')
-  assert.ok(positions.some((value, index) => index % 3 === 1 && value < -0.85), 'The tower base is present.')
+test('the volumetric aerostatic target keeps its architecture and fixed budgets across renderers', () => {
+  for (const count of [900, 1200, 1800, 5600]) {
+    const target = createShapeTargets(count).projects
+    assert.equal(target.positions.length, count * 3)
+    assert.equal(target.style.length, count * 2)
+    for (const name of ['groups', 'features', 'delays']) assert.equal(target[name].length, count)
+    assert.ok(target.positions.every(Number.isFinite))
+    assert.ok(target.positions.every((value) => Math.abs(value) < 1.1))
+    assert.ok(target.delays.every((value) => Number.isFinite(value) && value >= 0.06 && value <= 0.4))
+    assert.equal(new Set(target.features).size, Object.keys(balloonSamples.featureNames).length)
+    assert.ok(target.groups.filter((group) => group === 0).length > count * 0.6, 'The envelope receives most of the fixed budget.')
+    const z = target.positions.filter((_, index) => index % 3 === 2)
+    assert.ok(Math.min(...z) < -0.45 && Math.max(...z) > 0.45, 'The envelope includes a full front and back shell.')
+    assert.ok(target.positions.some((value, index) => index % 3 === 1 && value > 0.9), 'The envelope crown is present.')
+    assert.ok(target.positions.some((value, index) => index % 3 === 1 && value < -0.85), 'The architectural base is present.')
+    assert.deepEqual(target, createShapeTargets(count).projects, 'Correspondence is deterministic at each renderer budget.')
+  }
 })

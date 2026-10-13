@@ -2,10 +2,9 @@ import {
   createShapeTargets,
   HOME_ROTATION_SPEED,
   smoothProgress,
-  snapshotMorph,
-  snapshotStyle,
   visualState,
 } from './shapeTargets.js'
+import { particleProgress, sampleMorph, sampleMorphValues } from './aerostaticTransition.js'
 
 // This renderer has no GPU dependency. The same points and interruption model
 // remain animated when WebGL is unavailable, including ordinary Chrome software rendering.
@@ -20,6 +19,14 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
   const target = targets[currentState].positions.slice()
   const sourceStyle = targets[currentState].style.slice()
   const targetStyle = targets[currentState].style.slice()
+  const sourceDepth = new Float32Array(count * 2)
+  const targetDepth = new Float32Array(count * 2)
+  const delays = targets.projects.delays
+  for (let i = 0; i < count; i++) {
+    sourceDepth[i * 2] = currentState === 'home' ? 1 : 0
+    sourceDepth[i * 2 + 1] = currentState === 'projects' ? 1 : 0
+  }
+  targetDepth.set(sourceDepth)
   const buckets = Array.from({ length: 20 }, () => [])
   const colors = buckets.map((_, index) => {
     const opacity = (index % 10 + 1) / 10
@@ -35,9 +42,11 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
   let duration = mobile ? 450 : 1000
   let transitionDuration = duration
   let morph = 1
-  let rotation = 0
+  let transitionDirection = 0
+  let globeProjectTransition = false
+  let rotation = currentState === 'projects' ? 0.35 : 0
   let sourceRotation = 0
-  let targetRotation = 0
+  let targetRotation = rotation
   let lastGlobeRotation = 0
   let globeWeight = currentState === 'home' ? 1 : 0
   let sourceGlobe = globeWeight
@@ -46,6 +55,10 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
   let sourceProject = projectWeight
   let targetProject = projectWeight
   let projectPhase = 0
+  let projectIdleElapsed = 0
+  let idleYaw = 0
+  let placementPointScale = 1
+  let placementProgressBase = 0
   let inViewport = true
   let width = 1
   let height = 1
@@ -56,37 +69,53 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
   let slowFrames = 0
 
   function canAnimate() {
-    return !disposed && !document.hidden && inViewport && !paused && !reduced &&
-      (transitioning || currentState === 'home' || currentState === 'projects')
+    return !disposed && !document.hidden && inViewport && !paused &&
+      (transitioning || (!reduced && (currentState === 'home' || currentState === 'projects')))
   }
 
   function draw() {
     if (disposed || document.hidden || !inViewport) return
     context.clearRect(0, 0, width, height)
     for (const bucket of buckets) bucket.length = 0
-    const cosine = Math.cos(rotation)
-    const sine = Math.sin(rotation)
+    const cosine = Math.cos(rotation + idleYaw)
+    const sine = Math.sin(rotation + idleYaw)
+    const pitch = (0.035 + Math.sin(projectPhase * 0.61) * 0.01) * projectWeight
+    const pitchCosine = Math.cos(pitch)
+    const pitchSine = Math.sin(pitch)
     const sway = Math.sin(projectPhase * 0.72) * 0.018 * projectWeight
     const swayCosine = Math.cos(sway)
     const swaySine = Math.sin(sway)
     const float = (Math.sin(projectPhase * 1.05) * 0.024 + Math.sin(projectPhase * 0.43) * 0.009) * projectWeight
-    const radius = pointRadius + (0.75 - pointRadius) * projectWeight
+    const radius = (pointRadius + (0.75 - pointRadius) * projectWeight) * placementPointScale
     for (let i = 0; i < drawCount; i++) {
       const p = i * 3
       const s = i * 2
-      const x = source[p] + (target[p] - source[p]) * morph
-      const y = source[p + 1] + (target[p + 1] - source[p + 1]) * morph
-      const z = source[p + 2] + (target[p + 2] - source[p + 2]) * morph
+      const movement = particleProgress(morph, delays?.[i] ?? 0, transitionDirection)
+      let x = source[p] + (target[p] - source[p]) * movement
+      let y = source[p + 1] + (target[p + 1] - source[p + 1]) * movement
+      let z = source[p + 2] + (target[p + 2] - source[p + 2]) * movement
+      if (transitionDirection) {
+        const seed = (i * 0.61803398875) % 1
+        const sweep = Math.sin(Math.PI * movement)
+        x += sweep * 0.025 * (0.4 + 0.6 * Math.sin(Math.PI * 2 * seed))
+        y += sweep * 0.012 * Math.cos(Math.PI * 2 * seed)
+        z += sweep * 0.018 * Math.sin(Math.PI * 2 * seed)
+      }
       const rotatedX = x * cosine + z * sine
-      const rotatedZ = z * cosine - x * sine
-      const brightness = sourceStyle[s] + (targetStyle[s] - sourceStyle[s]) * morph
-      const accent = sourceStyle[s + 1] + (targetStyle[s + 1] - sourceStyle[s + 1]) * morph
-      const depth = 0.35 + 0.65 * smoothProgress((rotatedZ + 0.35) / 1.2)
-      const opacity = brightness * (1 + (depth - 1) * globeWeight)
+      const yawZ = z * cosine - x * sine
+      const rotatedY = y * pitchCosine - yawZ * pitchSine
+      const rotatedZ = y * pitchSine + yawZ * pitchCosine
+      const brightness = sourceStyle[s] + (targetStyle[s] - sourceStyle[s]) * movement
+      const accent = sourceStyle[s + 1] + (targetStyle[s + 1] - sourceStyle[s + 1]) * movement
+      const globeDepth = 0.35 + 0.65 * smoothProgress((rotatedZ + 0.35) / 1.2)
+      const projectDepth = 0.20 + 0.80 * smoothProgress((rotatedZ + 0.52) / 1.04)
+      const depthGlobeWeight = sourceDepth[s] + (targetDepth[s] - sourceDepth[s]) * movement
+      const depthProjectWeight = sourceDepth[s + 1] + (targetDepth[s + 1] - sourceDepth[s + 1]) * movement
+      const opacity = brightness * (1 + (globeDepth - 1) * depthGlobeWeight + (projectDepth - 1) * depthProjectWeight)
       if (opacity < 0.025) continue
       const bucket = buckets[(accent > 0.35 ? 10 : 0) + Math.min(9, Math.max(0, Math.round(opacity * 10) - 1))]
-      bucket.push(width / 2 + (rotatedX * swayCosine - y * swaySine) * scale,
-        height / 2 - (rotatedX * swaySine + y * swayCosine + float) * scale,
+      bucket.push(width / 2 + (rotatedX * swayCosine - rotatedY * swaySine) * scale,
+        height / 2 - (rotatedX * swaySine + rotatedY * swayCosine + float) * scale,
         radius * (1 + accent * 0.2))
     }
     // At most twenty fills per frame rather than changing style/filling per dot.
@@ -112,7 +141,8 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
     globeWeight = targetGlobe
     projectWeight = targetProject
     transitioning = false
-    onMorphFrame?.(1)
+    transitionDirection = 0
+    placementPointScale = onMorphFrame?.(1) ?? 1
   }
 
   function schedule() {
@@ -129,18 +159,27 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
     }
     lastFrame = timestamp
     const delta = Math.min(difference, 100)
-    if (projectWeight || targetProject) projectPhase += delta / 1000
+    if (!reduced && (projectWeight || targetProject)) projectPhase += delta / 1000
     if (transitioning) {
       elapsed += delta
-      morph = smoothProgress(elapsed / transitionDuration)
-      rotation = sourceRotation + (targetRotation - sourceRotation) * morph
-      globeWeight = sourceGlobe + (targetGlobe - sourceGlobe) * morph
-      projectWeight = sourceProject + (targetProject - sourceProject) * morph
-      onMorphFrame?.(morph)
+      const progress = Math.min(1, elapsed / transitionDuration)
+      const eased = smoothProgress(progress)
+      morph = transitionDirection ? progress : eased
+      const rotationProgress = transitionDirection ? smoothProgress((progress - 0.10) / 0.80) : eased
+      rotation = sourceRotation + (targetRotation - sourceRotation) * rotationProgress
+      if (transitionDirection === 1) rotation += HOME_ROTATION_SPEED * transitionDuration / 1000 * progress * (1 - progress) ** 2
+      globeWeight = sourceGlobe + (targetGlobe - sourceGlobe) * eased
+      const idleProgress = transitionDirection === 1 ? smoothProgress((progress - 0.66) / 0.34)
+        : transitionDirection === -1 ? smoothProgress(progress / 0.34) : eased
+      projectWeight = sourceProject + (targetProject - sourceProject) * idleProgress
+      placementPointScale = onMorphFrame?.(placementProgressBase + (1 - placementProgressBase) * progress) ?? 1
       if (elapsed >= transitionDuration) finishTransition()
     } else if (currentState === 'home') {
       rotation += delta / 1000 * HOME_ROTATION_SPEED
       lastGlobeRotation = rotation
+    } else if (currentState === 'projects') {
+      projectIdleElapsed += delta
+      idleYaw = Math.sin(projectPhase * 0.37) * 0.02 * smoothProgress(projectIdleElapsed / 600)
     }
     const started = performance.now()
     draw()
@@ -182,24 +221,36 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
     if (disposed) return
     const nextState = visualState(nextSection)
     if (nextState === currentState && !transitioning) return
-    snapshotMorph(source, target, morph, 0, source)
-    snapshotStyle(sourceStyle, targetStyle, morph, sourceStyle)
+    sampleMorph(source, target, morph, delays, transitionDirection, source)
+    sampleMorphValues(sourceStyle, targetStyle, morph, delays, transitionDirection, 2, sourceStyle)
+    sampleMorphValues(sourceDepth, targetDepth, morph, delays, transitionDirection, 2, sourceDepth)
     target.set(targets[nextState].positions)
     targetStyle.set(targets[nextState].style)
+    for (let i = 0; i < count; i++) {
+      targetDepth[i * 2] = nextState === 'home' ? 1 : 0
+      targetDepth[i * 2 + 1] = nextState === 'projects' ? 1 : 0
+    }
     sourceGlobe = globeWeight
     targetGlobe = nextState === 'home' ? 1 : 0
     sourceProject = projectWeight
     targetProject = nextState === 'projects' ? 1 : 0
-    sourceRotation = Math.atan2(Math.sin(rotation), Math.cos(rotation))
+    sourceRotation = Math.atan2(Math.sin(rotation + idleYaw), Math.cos(rotation + idleYaw))
     rotation = sourceRotation
-    if (currentState === 'home') lastGlobeRotation = sourceRotation
-    targetRotation = nextState === 'home' ? lastGlobeRotation : 0
+    idleYaw = 0
+    projectIdleElapsed = 0
+    if (currentState === 'home' && !transitioning) lastGlobeRotation = sourceRotation
+    const destinationRotation = nextState === 'home' ? lastGlobeRotation : nextState === 'projects' ? 0.35 : 0
+    targetRotation = sourceRotation + Math.atan2(Math.sin(destinationRotation - sourceRotation), Math.cos(destinationRotation - sourceRotation))
+    globeProjectTransition = (currentState === 'home' && nextState === 'projects') || (currentState === 'projects' && nextState === 'home')
+    transitionDirection = globeProjectTransition && !reduced ? nextState === 'projects' ? 1 : -1 : 0
     currentState = nextState
     morph = 0
     elapsed = 0
-    transitionDuration = durationOverride ?? duration
+    placementProgressBase = 0
+    transitionDuration = reduced && globeProjectTransition ? 220 : durationOverride ?? (transitionDirection ? mobile ? 1200 : 2000 : duration)
     transitioning = true
-    if (paused || reduced) finishTransition()
+    placementPointScale = onMorphFrame?.(0) ?? 1
+    if (paused || (reduced && !globeProjectTransition)) finishTransition()
     draw()
     resetAnimationClock()
   }
@@ -208,7 +259,23 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
     if (disposed) return
     paused = nextPaused
     reduced = nextReduced
-    if ((paused || reduced) && transitioning) finishTransition()
+    if (paused && transitioning) finishTransition()
+    else if (reduced && transitioning) {
+      if (globeProjectTransition) {
+        placementProgressBase += (1 - placementProgressBase) * Math.min(1, elapsed / transitionDuration)
+        sampleMorph(source, target, morph, delays, transitionDirection, source)
+        sampleMorphValues(sourceStyle, targetStyle, morph, delays, transitionDirection, 2, sourceStyle)
+        sampleMorphValues(sourceDepth, targetDepth, morph, delays, transitionDirection, 2, sourceDepth)
+        sourceRotation = rotation + idleYaw
+        sourceGlobe = globeWeight
+        sourceProject = projectWeight
+        idleYaw = 0
+        morph = 0
+        elapsed = 0
+        transitionDirection = 0
+        transitionDuration = 220
+      } else finishTransition()
+    }
     draw()
     resetAnimationClock()
   }
@@ -242,5 +309,5 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
   document.addEventListener('visibilitychange', visibilityChanged)
   resize()
   schedule()
-  return { setSection, setMotionPreferences, destroy }
+  return { setSection, setMotionPreferences, destroy, getRenderSize: () => width }
 }

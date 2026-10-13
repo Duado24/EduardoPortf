@@ -1,6 +1,7 @@
 import globeSamples from './globe-samples.json' with { type: 'json' }
 import balloonSamples from './balloon-samples.json' with { type: 'json' }
 import { createSymbolTarget } from './symbolTargets.js'
+import { matchBalloonToGlobe } from './aerostaticTransition.js'
 
 export const MAX_PARTICLES = 5600
 export const MOBILE_PARTICLES = 1800
@@ -80,6 +81,9 @@ export function createShapeTargets(count = MAX_PARTICLES) {
   const aboutStyle = new Float32Array(count * 2)
   const projects = Float32Array.from(balloonSamples.positions.slice(0, count * 3))
   const projectStyle = new Float32Array(count * 2)
+  const delays = Float32Array.from(balloonSamples.delays.slice(0, count))
+  const groups = Uint8Array.from(balloonSamples.groups.slice(0, count))
+  const features = Uint8Array.from(balloonSamples.features.slice(0, count))
   let profileCandidate = 1
 
   for (let i = 0; i < count; i++) {
@@ -96,13 +100,13 @@ export function createShapeTargets(count = MAX_PARTICLES) {
     } while (!insideAboutShape(x, y))
     about.set([x, y, (radicalInverse(i + 1, 5) - 0.5) * 0.08], i * 3)
     aboutStyle.set([0.57 + radicalInverse(i + 1, 7) * 0.32, 0], i * 2)
-    projectStyle.set([0.98, 0], i * 2)
+    projectStyle.set([features[i] === balloonSamples.featureNames.shell ? 0.82 : 1, 0], i * 2)
   }
 
   return {
     home: { positions: globe, style: globeStyle },
     about: { positions: about, style: aboutStyle },
-    projects: { positions: projects, style: projectStyle },
+    projects: matchBalloonToGlobe(globe, { positions: projects, style: projectStyle, delays, groups, features }),
     ...Object.fromEntries(['journey', 'skills', 'contact'].map((state) => [state, createSymbolTarget(state, count)])),
   }
 }

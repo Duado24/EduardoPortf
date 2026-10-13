@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import StaticFallback from '../particles/StaticFallback.jsx'
 import { canvasRendererReason } from '../particles/capabilities.js'
+import { placementAt } from '../particles/aerostaticTransition.js'
 
 function placementBox(region) {
   const bounds = region.getBoundingClientRect()
@@ -19,7 +20,7 @@ function clearPlacement(region) {
   }
 }
 
-export default function ParticleStage({ section, visualSection = section, motionPaused = false, reducedMotion = false, onRendererChange }) {
+export default function ParticleStage({ section, visualSection = section, motionPaused = false, reducedMotion = false, onRendererChange, onTransitionProgress }) {
   const containerRef = useRef(null)
   const placementRef = useRef(null)
   const lastBoxRef = useRef(null)
@@ -27,22 +28,21 @@ export default function ParticleStage({ section, visualSection = section, motion
   const webglCanvasRef = useRef(null)
   const fallbackCanvasRef = useRef(null)
   const rendererRef = useRef(null)
+  const presentationCallbackRef = useRef(onTransitionProgress)
+  const placementFrameRef = useRef({})
   const propertiesRef = useRef({ section, motionPaused, reducedMotion })
   const [status, setStatus] = useState({ mode: 'static', reason: 'loading' })
   const available = status.mode !== 'static'
 
+  useLayoutEffect(() => { presentationCallbackRef.current = onTransitionProgress }, [onTransitionProgress])
+
   const onMorphFrame = useCallback((progress) => {
+    presentationCallbackRef.current?.(progress)
     const placement = placementRef.current
-    if (!placement) return
+    if (!placement) return 1
     const region = containerRef.current?.parentElement
-    if (!region) return
-    const interpolate = (start, end) => start + (end - start) * progress
-    const box = {
-      x: interpolate(placement.from.x, placement.to.x),
-      y: interpolate(placement.from.y, placement.to.y),
-      size: interpolate(placement.from.size, placement.to.size),
-      backing: interpolate(placement.from.backing, placement.to.backing),
-    }
+    if (!region) return 1
+    const box = placementAt(placement.from, placement.to, progress, placement.direction, placementFrameRef.current)
     region.style.left = '0px'
     region.style.top = '0px'
     region.style.width = `${box.backing}px`
@@ -56,7 +56,9 @@ export default function ParticleStage({ section, visualSection = section, motion
       clearPlacement(region)
       lastBoxRef.current = placementBox(region)
       region.style.removeProperty('transition')
+      return 1
     }
+    return placement.renderSize / box.size
   }, [])
 
   useLayoutEffect(() => {
@@ -70,15 +72,21 @@ export default function ParticleStage({ section, visualSection = section, motion
     }
     if (previous === visualSection) return
     const interrupted = Boolean(placementRef.current)
-    const pair = (previous === 'about' && visualSection === 'projects') ||
-      (previous === 'projects' && visualSection === 'about')
+    const fromGlobe = previous === 'about' || previous === 'home'
+    const toGlobe = visualSection === 'about' || visualSection === 'home'
+    const pair = (fromGlobe && visualSection === 'projects') || (previous === 'projects' && toGlobe)
     if (!pair && !interrupted) return
-    const from = lastBoxRef.current
+    const from = { ...lastBoxRef.current }
     region.style.transition = 'none'
     clearPlacement(region)
     const to = placementBox(region)
-    if (!motionPaused && !reducedMotion && rendererRef.current && (pair || interrupted)) {
-      placementRef.current = { from, to, duration: pair ? 1400 : undefined }
+    if (!motionPaused && rendererRef.current && (pair || interrupted)) {
+      placementRef.current = {
+        from, to,
+        renderSize: rendererRef.current.getRenderSize?.() ?? from.size,
+        direction: reducedMotion || !pair ? 0 : visualSection === 'projects' ? 1 : -1,
+        duration: reducedMotion ? 220 : pair ? window.matchMedia('(max-width: 760px)').matches ? 1200 : 2000 : undefined,
+      }
       onMorphFrame(0)
     } else {
       placementRef.current = null
@@ -108,22 +116,28 @@ export default function ParticleStage({ section, visualSection = section, motion
 
   useEffect(() => {
     propertiesRef.current = { section, motionPaused, reducedMotion }
+  }, [section, motionPaused, reducedMotion])
+
+  useEffect(() => {
     rendererRef.current?.setMotionPreferences(motionPaused, reducedMotion)
+  }, [motionPaused, reducedMotion])
+
+  useEffect(() => {
     rendererRef.current?.setSection(section, placementRef.current?.duration)
-  }, [section, visualSection, motionPaused, reducedMotion])
+  }, [section, visualSection])
 
   useEffect(() => {
     let active = true
     let renderer
-    setStatus({ mode: 'static', reason: reducedMotion ? 'reduced-motion' : 'loading' })
-    if (reducedMotion) return undefined
-    const canvasReason = canvasRendererReason()
+    setStatus({ mode: 'static', reason: 'loading' })
+    const canvasReason = propertiesRef.current.reducedMotion ? 'reduced-motion' : canvasRendererReason()
     let fallingBack = false
 
     async function startCanvas(reason) {
       if (!active || fallingBack) return
       fallingBack = true
       renderer?.destroy()
+      onMorphFrame(1)
       rendererRef.current = null
       setStatus({ mode: 'static', reason: 'loading' })
       try {
@@ -134,7 +148,7 @@ export default function ParticleStage({ section, visualSection = section, motion
           container: containerRef.current,
           ...propertiesRef.current,
           onMorphFrame,
-          lowPower: Boolean(canvasReason),
+          lowPower: Boolean(canvasReason && canvasReason !== 'reduced-motion'),
         })
         rendererRef.current = renderer
         setStatus({ mode: 'canvas', reason })
@@ -170,7 +184,7 @@ export default function ParticleStage({ section, visualSection = section, motion
       renderer?.destroy()
       rendererRef.current = null
     }
-  }, [reducedMotion, onMorphFrame])
+  }, [onMorphFrame])
 
   return (
     <div className="particle-stage" ref={containerRef} aria-hidden="true" data-renderer={status.mode} data-renderer-reason={status.reason || undefined}>

@@ -1,171 +1,217 @@
 // Offline asset preparation only. Never imported by the portfolio.
 // Usage: node scripts/generate-balloon-targets.mjs
-// Uses the supplied SVG and sampler in headless Chromium because SVGGeometryElement
-// path-length APIs are browser APIs. The source files remain unchanged.
-import { execFile } from 'node:child_process'
+// The approved HTML's geometry runs once in Node. Its canvas, animation, and
+// atmospheric extras are deliberately excluded from the production asset.
 import { createHash } from 'node:crypto'
-import { constants } from 'node:fs'
-import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { promisify } from 'node:util'
+import { runInNewContext } from 'node:vm'
 
-const execFileAsync = promisify(execFile)
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const svgPath = resolve(projectRoot, 'references/claude/balloon (2).svg')
-const samplerPath = resolve(projectRoot, 'references/claude/balloonTargets (2).js')
+const sourcePath = 'references/claude/aerostatic_globe_detailed.html'
 const destination = resolve(projectRoot, 'src/particles/balloon-samples.json')
-const svg = await readFile(svgPath, 'utf8')
-const sampler = await readFile(samplerPath, 'utf8')
+const html = await readFile(resolve(projectRoot, sourcePath), 'utf8')
 const count = 5600
-const height = 2.2
+const height = 2.12
+const seed = 11
 
-function replaceExactly(source, before, after, expected = 1) {
-  const found = source.split(before).length - 1
-  if (found !== expected) throw new Error(`The supplied sampler changed; expected ${expected} occurrence(s) of: ${before}`)
-  return source.replaceAll(before, after)
+// Keep the original construction of the envelope profile and all architectural
+// curves. Only tag semantic sections so the fixed budget can be shared between
+// the shell and small details instead of inheriting the demo's line density.
+const start = html.indexOf('function mulberry(')
+const end = html.indexOf('const N=bx.length;')
+if (start < 0 || end <= start) throw new Error('The approved HTML geometry boundaries changed.')
+let geometry = html.slice(start, end)
+const featureNames = {
+  shell: 0, gores: 1, bands: 2, mouth: 3, patches: 4, ropes: 5,
+  spire: 6, tower: 7, windows: 8, house: 9, gable: 10, balcony: 11,
+  telescopes: 12, bunting: 13,
+}
+const groupNames = { envelope: 0, structure: 1, detail: 2 }
+const definitions = [
+  ['shell', 2240, 0, .06, .12],
+  ['gores', 900, 0, .08, .15],
+  ['bands', 240, 0, .10, .18],
+  ['mouth', 100, 0, .11, .19],
+  ['patches', 280, 0, .12, .20],
+  ['ropes', 190, 1, .18, .24],
+  ['spire', 180, 1, .20, .27],
+  ['tower', 220, 1, .23, .29],
+  ['windows', 100, 2, .33, .40],
+  ['house', 270, 1, .26, .33],
+  ['gable', 150, 2, .30, .37],
+  ['balcony', 220, 2, .30, .38],
+  ['telescopes', 280, 2, .29, .37],
+  ['bunting', 230, 2, .34, .40],
+]
+if (definitions.reduce((sum, entry) => sum + entry[1], 0) !== count) {
+  throw new Error('Feature allocations must match the existing particle budget.')
 }
 
-// The supplied sampler is run as written, apart from recording the source SVG
-// path for each sample. That metadata lets the output retain every detail even
-// when the renderer uses only a prefix of the 5600-point buffer.
-let instrumented = sampler.replace(/^export /gm, '')
-instrumented = replaceExactly(instrumented,
-  'shapes.push({ el, name, len });',
-  'shapes.push({ el, name, len, shapeId: shapes.length });')
-instrumented = replaceExactly(instrumented,
-  'const glow = new Float32Array(count);',
-  'const glow = new Float32Array(count);\n  const shapeIds = new Uint16Array(count);')
-instrumented = replaceExactly(instrumented,
-  'groups[i] = GROUPS[sh.name];',
-  'groups[i] = GROUPS[sh.name];\n      shapeIds[i] = sh.shapeId;', 2)
-instrumented = replaceExactly(instrumented,
-  'return { positions, groups, glow, count, scale };',
-  'return { positions, groups, glow, shapeIds, count, scale };')
-
-// Avoid adding a DOM package just for asset generation. Chromium evaluates the
-// original geometry with native SVG path APIs and returns the flat buffers.
-const encodedSvg = JSON.stringify(svg).replaceAll('<', '\\u003c')
-const page = `<!doctype html><html><body><script>
-${instrumented}
-try {
-  const sampled = sampleBalloon(${encodedSvg}, { count: ${count}, height: ${height}, seed: 1 });
-  const result = {
-    positions: Array.from(sampled.positions),
-    groups: Array.from(sampled.groups),
-    glow: Array.from(sampled.glow),
-    shapeIds: Array.from(sampled.shapeIds),
-    groupNames: GROUPS,
-  };
-  document.body.innerHTML = '<pre id="balloon-result">' + btoa(JSON.stringify(result)) + '</pre>';
-} catch (error) {
-  document.body.innerHTML = '<pre id="balloon-error">' + String(error.stack || error) + '</pre>';
+function replaceExactly(before, after) {
+  if (geometry.split(before).length !== 2) throw new Error(`The approved HTML changed: ${before}`)
+  geometry = geometry.replace(before, after)
 }
-</script></body></html>`
-
-const browserCandidates = [
-  process.env.BALLOON_CHROME,
-  process.env.HOME && resolve(process.env.HOME, '.cache/ms-playwright/chromium-1248/chrome-linux64/chrome'),
-  '/usr/bin/chromium',
-  '/usr/bin/chromium-browser',
-  '/usr/bin/google-chrome',
-].filter(Boolean)
-let browser
-for (const candidate of browserCandidates) {
-  try {
-    await access(candidate, constants.X_OK)
-    browser = candidate
-    break
-  } catch { /* Try the next installed browser. */ }
+function mark(before, name) {
+  replaceExactly(before, `feature=${featureNames[name]};primitive++;\n${before}`)
 }
-if (!browser) throw new Error('Chromium is required for SVG sampling. Set BALLOON_CHROME to its executable path.')
-const tempDir = await mkdtemp(resolve(tmpdir(), 'eduardo-balloon-'))
-let sampled
-try {
-  const pagePath = resolve(tempDir, 'sample.html')
-  await writeFile(pagePath, page)
-  const { stdout } = await execFileAsync(browser, [
-    '--headless', '--no-sandbox', '--disable-gpu', '--disable-extensions',
-    '--disable-background-networking', '--dump-dom', `--user-data-dir=${resolve(tempDir, 'profile')}`,
-    `file://${pagePath}`,
-  ], { maxBuffer: 12 * 1024 * 1024, timeout: 30000 })
-  const result = stdout.match(/<pre id="balloon-result">([A-Za-z0-9+/=]+)<\/pre>/)
-  if (!result) {
-    const error = stdout.match(/<pre id="balloon-error">([\s\S]*?)<\/pre>/)
-    throw new Error(`SVG sampling failed: ${error?.[1] || stdout.slice(-1000)}`)
+
+replaceExactly('const bx=[],by=[],bz=[],grp=[],fl=[],gl=[];',
+  'let feature=0,primitive=0;const features=[],primitives=[];const bx=[],by=[],bz=[],grp=[],fl=[],gl=[];')
+replaceExactly('function add(x,y,z,g,f,hot){',
+  'function add(x,y,z,g,f,hot){features.push(feature);primitives.push(primitive);')
+for (const declaration of [
+  'function line(a,b,g,f,hot){', 'function ring(cy,r,g,hot){',
+  'function circ(c,r,v,w,g){', 'function ball(c,r,n,g){',
+  'function patch(poly,thc){',
+]) replaceExactly(declaration, `${declaration}primitive++;`)
+
+replaceExactly('for(let k=0;k<10;k++){', `feature=${featureNames.gores};\nfor(let k=0;k<10;k++){primitive++;`)
+replaceExactly('for(const y of[224,242,288])ring(y,rAtY(y),0,true);',
+  `feature=${featureNames.bands};for(const y of[224,242])ring(y,rAtY(y),0,true);\n` +
+  `feature=${featureNames.mouth};ring(288,rAtY(288),0,true);`)
+mark('patch(PL,0);', 'patches')
+mark('// 2. ropes', 'ropes')
+mark('// 3. gothic spire', 'spire')
+mark('// 4. tower', 'tower')
+mark('for(const zs of[1,-1])', 'windows')
+mark('// 5. lower house', 'house')
+mark('{const d=[[-15,500]', 'windows')
+mark('// 6. gabled birdhouse', 'gable')
+mark('// 7. balcony', 'balcony')
+mark('// 8. telescopes', 'telescopes')
+mark('// 9. bunting', 'bunting')
+// These are filled surfaces or independently sampled curves, rather than
+// additional points on the last line/ring primitive.
+replaceExactly('for(let i=0;i<170;i++){', 'primitive++;for(let i=0;i<170;i++){')
+replaceExactly('for(let i=0;i<260;i++){', 'primitive++;for(let i=0;i<260;i++){')
+replaceExactly('for(let i=0;i<300;i++){', 'primitive++;for(let i=0;i<300;i++){')
+replaceExactly('for(let i=0;i<150;i++){', 'primitive++;for(let i=0;i<150;i++){')
+replaceExactly('for(let k=0;k<3;k++){', 'for(let k=0;k<3;k++){primitive++;')
+replaceExactly('const n=Math.round(BR*span*D*1.1);', 'primitive++;const n=Math.round(BR*span*D*1.1);')
+
+const sampled = runInNewContext(
+  `${geometry}\n({bx,by,bz,features,primitives,PY,PR,PA,random:mulberry(${seed + 1})});`,
+  {}, { timeout: 5000 })
+const random = sampled.random
+const goldenAngle = Math.PI * (3 - Math.sqrt(5))
+function radicalInverse(index) {
+  let result = 0, weight = .5
+  while (index) {
+    result += (index & 1) * weight
+    index >>>= 1
+    weight *= .5
   }
-  sampled = JSON.parse(Buffer.from(result[1], 'base64').toString('utf8'))
-} finally {
-  await rm(tempDir, { recursive: true, force: true })
+  return result
 }
 
-if (sampled.positions.length !== count * 3 || sampled.groups.length !== count ||
-    sampled.glow.length !== count || sampled.shapeIds.length !== count) {
-  throw new Error('The supplied sampler returned an unexpected particle count.')
+// Area coordinate is the prototype's integral of r * ds. Pairing a van der
+// Corput area sequence with golden-angle azimuth avoids random shell clumps,
+// and remains well spread when Canvas consumes only the first few hundred.
+function shellSamples(total) {
+  const { PY, PR, PA } = sampled
+  return Array.from({ length: total }, (_, i) => {
+    const area = radicalInverse(i + 1) * PA.at(-1)
+    let lo = 0, hi = PA.length - 1
+    while (lo < hi) {
+      const middle = (lo + hi) >>> 1
+      if (PA[middle] < area) lo = middle + 1
+      else hi = middle
+    }
+    const next = Math.max(1, lo), previous = next - 1
+    const fraction = (area - PA[previous]) / (PA[next] - PA[previous])
+    const y = PY[previous] + (PY[next] - PY[previous]) * fraction
+    const radius = PR[previous] + (PR[next] - PR[previous]) * fraction
+    const azimuth = i * goldenAngle
+    return [radius * Math.sin(azimuth), y, radius * Math.cos(azimuth)]
+  })
 }
 
-// Weighted fair ordering across the original SVG paths. A 900/1200/1800-point
-// prefix includes parts of the envelope, gores, house, and small features,
-// rather than ending partway through a feature group or a single long path.
-const shapeCount = Math.max(...sampled.shapeIds) + 1
-const paths = Array.from({ length: shapeCount }, () => [])
-for (let i = 0; i < count; i++) paths[sampled.shapeIds[i]].push(i)
-let seed = 0x5eb0a11
-function random() {
-  seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
-  return seed / 4294967296
-}
-for (const path of paths) {
-  for (let i = path.length - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1))
-    ;[path[i], path[j]] = [path[j], path[i]]
-  }
-}
-const used = new Uint16Array(shapeCount)
-const order = new Uint16Array(count)
-for (let i = 0; i < count; i++) {
-  let next = -1
-  let deficit = -Infinity
-  for (let shapeId = 0; shapeId < shapeCount; shapeId++) {
-    if (used[shapeId] >= paths[shapeId].length) continue
-    const owed = (i + 1) * paths[shapeId].length / count - used[shapeId]
-    if (owed > deficit) {
-      deficit = owed
-      next = shapeId
+// Uniformly spread a primitive's original line/ring/surface samples before fair
+// interleaving. A bit-reversed selection visits both ends and the middle early.
+function distributePrimitive(points) {
+  const result = [], used = new Set()
+  for (let i = 1; result.length < points.length; i++) {
+    const index = Math.min(points.length - 1, Math.floor(radicalInverse(i) * points.length))
+    if (!used.has(index)) {
+      result.push(points[index])
+      used.add(index)
     }
   }
-  order[i] = paths[next][used[next]++]
+  return result
 }
 
+function fairInterleave(lists, total) {
+  const lengths = lists.map((list) => list.length)
+  const available = lengths.reduce((sum, length) => sum + length, 0)
+  if (total > available) throw new Error('A feature allocation exceeds its source geometry.')
+  const used = lists.map(() => 0), result = []
+  for (let i = 0; i < total; i++) {
+    let next = -1, largestDeficit = -Infinity
+    for (let j = 0; j < lists.length; j++) {
+      if (used[j] >= lengths[j]) continue
+      const deficit = (i + 1) * lengths[j] / available - used[j]
+      if (deficit > largestDeficit) {
+        next = j
+        largestDeficit = deficit
+      }
+    }
+    result.push(lists[next][used[next]++])
+  }
+  return result
+}
+
+const sourceFeatures = definitions.map(() => new Map())
+for (let i = 0; i < sampled.bx.length; i++) {
+  const feature = sampled.features[i], primitive = sampled.primitives[i]
+  if (!sourceFeatures[feature].has(primitive)) sourceFeatures[feature].set(primitive, [])
+  sourceFeatures[feature].get(primitive).push([sampled.bx[i], sampled.by[i], sampled.bz[i]])
+}
+const featureSamples = definitions.map(([name, total, group, delayStart, delayEnd]) => {
+  const positions = name === 'shell' ? shellSamples(total) : fairInterleave(
+    Array.from(sourceFeatures[featureNames[name]].values(), distributePrimitive), total)
+  return positions.map((position) => ({
+    position, feature: featureNames[name], group,
+    delay: delayStart + random() * (delayEnd - delayStart),
+  }))
+})
+const ordered = fairInterleave(featureSamples, count)
+
+// The original drawing's 6..580 height sets the aspect ratio. Keep the same
+// scale on all three axes: neither the envelope nor the architecture is flattened.
+const sourceBounds = [0, 1, 2].map((axis) => {
+  const values = ordered.map((sample) => sample.position[axis])
+  return [Math.min(...values), Math.max(...values)]
+})
+const centerY = (sourceBounds[1][0] + sourceBounds[1][1]) / 2
+const scale = height / (sourceBounds[1][1] - sourceBounds[1][0])
 const round = (value) => Number(value.toFixed(5))
-const positions = []
-const groups = []
-const glow = []
-const shapeIds = []
-for (const sample of order) {
-  positions.push(...sampled.positions.slice(sample * 3, sample * 3 + 3).map(round))
-  groups.push(sampled.groups[sample])
-  glow.push(round(sampled.glow[sample]))
-  shapeIds.push(sampled.shapeIds[sample])
+const positions = [], groups = [], features = [], delays = []
+for (const sample of ordered) {
+  const [x, y, z] = sample.position
+  positions.push(round(x * scale), round((centerY - y) * scale), round(z * scale))
+  groups.push(sample.group)
+  features.push(sample.feature)
+  delays.push(round(sample.delay))
+}
+if (positions.length !== count * 3 || !positions.every(Number.isFinite)) {
+  throw new Error('Invalid generated geometry.')
 }
 
 const output = {
-  sourceSvg: 'references/claude/balloon (2).svg',
-  sourceSampler: 'references/claude/balloonTargets (2).js',
-  sourceSvgSha256: createHash('sha256').update(svg).digest('hex'),
-  sourceSamplerSha256: createHash('sha256').update(sampler).digest('hex'),
-  sampleOptions: { count, height, seed: 1 },
-  groupNames: sampled.groupNames,
-  positions, groups, glow, shapeIds,
+  sourceHtml: sourcePath,
+  sourceHtmlSha256: createHash('sha256').update(html).digest('hex'),
+  sampleOptions: { count, height, seed, shellSampling: 'area-stratified-golden-angle' },
+  groupNames, featureNames, positions, groups, features, delays,
 }
 await writeFile(destination, JSON.stringify(output) + '\n')
-
 const bounds = [0, 1, 2].map((axis) => {
   const values = positions.filter((_, index) => index % 3 === axis)
   return [Math.min(...values), Math.max(...values)]
 })
-const distribution = Object.fromEntries(Object.entries(sampled.groupNames).map(([name, id]) => [
-  name, [900, 1200, 1800, count].map((prefix) => groups.slice(0, prefix).filter((group) => group === id).length),
+const prefixes = [900, 1200, 1800, count]
+const distribution = Object.fromEntries(definitions.map(([name]) => [name,
+  prefixes.map((prefix) => features.slice(0, prefix).filter((id) => id === featureNames[name]).length),
 ]))
-console.log(JSON.stringify({ destination, count, shapeCount, bounds, prefixes: [900, 1200, 1800, count], distribution }, null, 2))
+console.log(JSON.stringify({ destination, count, sourceCount: sampled.bx.length, bounds, prefixes, distribution }, null, 2))

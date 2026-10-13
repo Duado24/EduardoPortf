@@ -1,0 +1,160 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>3D Aerostatic Globe · Detailed Particle Model</title><style>html,body{margin:0;height:100%;background:#0b0c10;color:#e9dfd3;font:14px system-ui}main{height:100%;display:grid;place-items:center}canvas{width:min(92vw,750px);height:min(80vh,750px);touch-action:none;cursor:grab}canvas:active{cursor:grabbing}.info{position:fixed;top:20px;left:24px;line-height:1.7}.info b{font-size:17px}.controls{position:fixed;bottom:22px;left:24px;color:#aaa;display:flex;gap:8px;flex-wrap:wrap;align-items:center}button{background:#25272e;color:#eee;border:1px solid #555;border-radius:6px;padding:9px 15px;cursor:pointer}button:hover{background:#2f323b}</style><div class="info"><b>3D Aerostatic Globe</b><div id="count"></div><div>Drag to rotate · scroll to zoom</div></div><main><canvas id="c"></canvas></main><div class="controls"><button id="toggle">Pause motion</button><button id="morph">Morph to globe</button><button id="burn">Fire burner</button></div><script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+let W,H,angle=.5,tilt=.1,zoom=1,paused=matchMedia('(prefers-reduced-motion: reduce)').matches,drag=false,lastX=0,lastY=0;
+let M=1,Mt=1,T=0,flare=0,lift=0,burnAt=-99,lastNow=performance.now();
+const K=.0037; // svg-units -> model units
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const rand=mulberry(11),TAU=Math.PI*2;
+
+/* ---------- envelope profile (surface of revolution, from the drawing) ---------- */
+const SEG=[[[178,6],[252,6],[318,62],[322,140]],[[322,140],[324,212],[274,268],[216,288]]];
+function bez(s,t){const u=1-t;return[u*u*u*s[0][0]+3*u*u*t*s[1][0]+3*u*t*t*s[2][0]+t*t*t*s[3][0],u*u*u*s[0][1]+3*u*u*t*s[1][1]+3*u*t*t*s[2][1]+t*t*t*s[3][1]]}
+const PY=[],PR=[],PS=[],PA=[];{let s=0,a=0;for(let i=0;i<=400;i++){const g=i/200,si=g>=1?1:0,[x,y]=bez(SEG[si],Math.min(1,g-si)),r=x-178;if(i>0){const ds=Math.hypot(y-PY[i-1],r-PR[i-1]);s+=ds;a+=ds*(r+PR[i-1])/2}PY.push(y);PR.push(r);PS.push(s);PA.push(a)}}
+function atCum(arr,v){let lo=0,hi=arr.length-1;while(lo<hi){const m=(lo+hi)>>1;if(arr[m]<v)lo=m+1;else hi=m}const i=Math.max(1,lo);return[i-1,(v-arr[i-1])/Math.max(1e-9,arr[i]-arr[i-1])]}
+function rAtY(y){const[j,f]=atCum(PY,y);return PR[j]+(PR[j+1]-PR[j])*f}
+
+/* ---------- particle model (svg units: x from axis, y down, z toward viewer) ---------- */
+const bx=[],by=[],bz=[],grp=[],fl=[],gl=[];const D=.75;
+function hotAt(y){return y<=288?Math.max(0,Math.min(1,(y-205)/83)):Math.max(0,1-(y-288)/50)}
+function add(x,y,z,g,f,hot){bx.push(x);by.push(y);bz.push(z);grp.push(g);fl.push(f||0);gl.push(hot?hotAt(y):0)}
+function line(a,b,g,f,hot){const L=Math.hypot(b[0]-a[0],b[1]-a[1],b[2]-a[2]),n=Math.max(2,Math.round(L*D));for(let i=0;i<n;i++){const t=(i+rand())/n;add(a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t,g,typeof f==='function'?f(t):f,hot)}}
+function poly3(pts,g,close){for(let i=0;i<pts.length-(close?0:1);i++)line(pts[i],pts[(i+1)%pts.length],g,0,false)}
+function ring(cy,r,g,hot){const n=Math.max(8,Math.round(TAU*r*D));for(let i=0;i<n;i++){const t=(i+rand())/n*TAU;add(r*Math.sin(t),cy,r*Math.cos(t),g,0,hot)}}
+function circ(c,r,v,w,g){const n=Math.max(8,Math.round(TAU*r*D));for(let i=0;i<n;i++){const t=(i+rand())/n*TAU,cs=Math.cos(t)*r,sn=Math.sin(t)*r;add(c[0]+cs*v[0]+sn*w[0],c[1]+cs*v[1]+sn*w[1],c[2]+cs*v[2]+sn*w[2],g,0,false)}}
+function ball(c,r,n,g){for(let i=0;i<n;i++){const z=rand()*2-1,t=rand()*TAU,q=Math.sqrt(1-z*z);add(c[0]+r*q*Math.cos(t),c[1]+r*z,c[2]+r*q*Math.sin(t),g,0,false)}}
+function cyl(a,b,r,nL,g){let u=[b[0]-a[0],b[1]-a[1],b[2]-a[2]];const L=Math.hypot(...u);u=u.map(q=>q/L);let v=[-u[1],u[0],0],vl=Math.hypot(...v);if(vl<.1){v=[0,-u[2],u[1]];vl=Math.hypot(...v)}v=v.map(q=>q/vl);const w=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]];
+ for(let k=0;k<nL;k++){const ph=k*TAU/nL,o=[0,1,2].map(i=>r*(Math.cos(ph)*v[i]+Math.sin(ph)*w[i]));line([a[0]+o[0],a[1]+o[1],a[2]+o[2]],[b[0]+o[0],b[1]+o[1],b[2]+o[2]],g,0,false)}
+ circ(a,r,v,w,g);circ(b,r,v,w,g);return{u,v,w}}
+
+// 1. envelope: shell dots, 10 gores (meridians), belts, mouth ring, patches
+const TS=PS[400],TA=PA[400];
+for(let i=0;i<3200;i++){const[j,f]=atCum(PA,rand()*TA),y=PY[j]+(PY[j+1]-PY[j])*f,r=PR[j]+(PR[j+1]-PR[j])*f,t=rand()*TAU;add(r*Math.sin(t),y,r*Math.cos(t),0,0,true)}
+for(let k=0;k<10;k++){const th=k*Math.PI/5,n=Math.round(TS*D);for(let i=0;i<n;i++){const[j,f]=atCum(PS,(i+rand())/n*TS),y=PY[j]+(PY[j+1]-PY[j])*f,r=PR[j]+(PR[j+1]-PR[j])*f;add(r*Math.sin(th),y,r*Math.cos(th),0,0,true)}}
+for(const y of[224,242,288])ring(y,rAtY(y),0,true);
+function patch(poly,thc){const cx=poly.reduce((s,p)=>s+p[0],0)/poly.length,cy=poly.reduce((s,p)=>s+p[1],0)/poly.length;for(const sc of[1,.8]){const q=poly.map(p=>[cx+(p[0]-cx)*sc,cy+(p[1]-cy)*sc]);for(let e=0;e<q.length;e++){const a=q[e],b=q[(e+1)%q.length],n=Math.max(2,Math.round(Math.hypot(b[0]-a[0],b[1]-a[1])*D));for(let i=0;i<n;i++){const t=(i+rand())/n,y=a[1]+(b[1]-a[1])*t,r=rAtY(y)*1.012,th=thc+Math.asin(Math.max(-.97,Math.min(.97,(a[0]+(b[0]-a[0])*t)/(r/1.012))));add(r*Math.sin(th),y,r*Math.cos(th),0,0,true)}}}}
+const PL=[[-94,62],[-40,30],[-2,58],[-28,98],[-78,104]],PRt=[[52,40],[106,86],[84,128],[54,108],[34,70]];
+patch(PL,0);patch(PRt,0);patch(PL,Math.PI);patch(PRt,Math.PI);
+
+// 2. ropes (mouth ring -> tower top)
+for(let j=0;j<8;j++){const ph=(j+.5)*Math.PI/4;line([38*Math.sin(ph),288,38*Math.cos(ph)],[30*Math.sin(ph),376,30*Math.cos(ph)],1,0,true)}
+
+// 3. gothic spire
+for(let k=0;k<8;k++){const ph=k*Math.PI/4,n=Math.round(75*D);for(let i=0;i<n;i++){const s=(i+rand())/n;add(34*Math.pow(s,1.5)*Math.sin(ph),310+70*s,34*Math.pow(s,1.5)*Math.cos(ph),1)}}
+ring(380,34,1);ring(384,37,1);
+for(let i=0;i<170;i++){const s=Math.sqrt(rand()),r=34*Math.pow(s,1.5),t=rand()*TAU;add(r*Math.sin(t),310+70*s,r*Math.cos(t),1)}
+
+// 4. tower with arched windows (front + back)
+const TR=26;
+for(let k=0;k<6;k++){const ph=k*Math.PI/3+Math.PI/6;line([TR*Math.sin(ph),380,TR*Math.cos(ph)],[TR*Math.sin(ph),452,TR*Math.cos(ph)],1,0,false)}
+ring(452,TR,1);ring(380,TR,1);
+for(let i=0;i<260;i++){const t=rand()*TAU;add(TR*Math.sin(t),380+72*rand(),TR*Math.cos(t),1)}
+for(const zs of[1,-1]){const pts=[[-10,440]];pts.push([-10,412]);for(let a=1;a<=10;a++){const t=Math.PI-a*Math.PI/10;pts.push([10*Math.cos(t),412-10*Math.sin(t)])}pts.push([10,440]);poly3(pts.map(p=>[p[0],p[1],zs*Math.sqrt(TR*TR-p[0]*p[0])*1.005]),1,true)}
+
+// 5. lower house + door + windows
+const hx=y=>40-4*(y-452)/48,hz=y=>32-3*(y-452)/48;
+const C=[];for(const[y,X,Z]of[[452,40,32],[500,36,29]])for(const[sx,sz]of[[-1,-1],[1,-1],[1,1],[-1,1]])C.push([sx*X,y,sz*Z]);
+for(let i=0;i<4;i++){line(C[i],C[i+4],1,0,false);line(C[i],C[(i+1)%4],1,0,false);line(C[i+4],C[(i+1)%4+4],1,0,false)}
+for(let i=0;i<300;i++){const y=452+48*rand(),f=rand()*2-1,k=i%4;if(k<2)add(f*hx(y),y,(k?1:-1)*hz(y),1);else add((k===2?1:-1)*hx(y),y,f*hz(y),1)}
+{const d=[[-15,500],[-15,478]];for(let a=1;a<=8;a++){const t=Math.PI-a*Math.PI/8;d.push([-8+7*Math.cos(t),478-7*Math.sin(t)])}d.push([-1,500]);poly3(d.map(p=>[p[0],p[1],hz(p[1])+.6]),1,false)}
+poly3([[10,468],[26,468],[26,486],[10,486]].map(p=>[p[0],p[1],hz(p[1])+.6]),1,true);
+poly3([[10,468],[26,468],[26,486],[10,486]].map(p=>[p[0],p[1],-hz(p[1])-.6]),1,true);
+poly3([[-8,468],[8,468],[8,486],[-8,486]].map(p=>[-hx(p[1])-.6,p[1],p[0]]),1,true);
+
+// 6. gabled birdhouse on the right side
+{const R=[[44,440,-18],[44,440,18]],E=[[26,466,-18],[62,466,-18],[26,466,18],[62,466,18]];line(R[0],R[1],1,0,false);line(R[0],E[0],1,0,false);line(R[0],E[1],1,0,false);line(R[1],E[2],1,0,false);line(R[1],E[3],1,0,false);line(E[0],E[2],1,0,false);line(E[1],E[3],1,0,false);line(E[0],E[1],1,0,false);line(E[2],E[3],1,0,false);
+ for(const[x,z]of[[30,-14],[58,-14],[30,14],[58,14]])line([x,466,z],[x,490,z],1,0,false);poly3([[30,490,-14],[58,490,-14],[58,490,14],[30,490,14]],1,true);
+ circ([44,478,14.6],4,[1,0,0],[0,1,0],1)}
+
+// 7. balcony, lantern, streamers
+ring(506,44,1);ring(497,42,1);
+for(let k=0;k<16;k++){const ph=k*Math.PI/8;line([42*Math.sin(ph),497,42*Math.cos(ph)],[42*Math.sin(ph),506,42*Math.cos(ph)],1,0,false)}
+for(let i=0;i<150;i++){const r=44*Math.sqrt(rand()),t=rand()*TAU;add(r*Math.sin(t),507,r*Math.cos(t),1)}
+line([0,506,0],[0,540,0],1,0,false);ring(540,9,1);ring(556,9,1);for(let k=0;k<6;k++){const ph=k*Math.PI/3;line([9*Math.sin(ph),540,9*Math.cos(ph)],[9*Math.sin(ph),556,9*Math.cos(ph)],1,0,false)}
+for(let k=0;k<3;k++){const ph=k*TAU/3+.4,n=Math.round(70*D);for(let i=0;i<n;i++){const s=(i+rand())/n,sw=Math.sin(Math.PI*s)*10;add(40*Math.sin(ph)+sw*Math.cos(ph),510+70*s,40*Math.cos(ph)-sw*Math.sin(ph),1,s*.8)}}
+
+// 8. telescopes + mounts
+{const L=cyl([-104,348,0],[-38,372,0],7,6,1);circ([-105,347.6,0],5,L.v,L.w,1);ball([-36,376,0],8,40,1);
+ const R=cyl([18,372,0],[50,372,0],14,8,1);circ([53,372,0],16,R.v,R.w,1);circ([53,372,0],10,R.v,R.w,1);ball([18,372,0],9,40,1)}
+
+// 9. bunting festoon wrapped around the house
+{const SC=6,BR=70,BY=424,SAG=20,span=TAU/SC;for(let i=0;i<SC;i++){const p0=i*span,pos=s=>{const ph=p0+span*s;return[BR*Math.sin(ph),BY+SAG*Math.sin(Math.PI*s),BR*Math.cos(ph)]};
+ const n=Math.round(BR*span*D*1.1);for(let j=0;j<n;j++){const s=(j+rand())/n,p=pos(s);add(p[0],p[1],p[2],1,.15*Math.sin(Math.PI*s))}
+ for(const s of[.2,.5,.8]){const p=pos(s),ph=p0+span*s,tx=Math.cos(ph),tz=-Math.sin(ph),A=[p[0]-5*tx,p[1],p[2]-5*tz],B=[p[0]+5*tx,p[1],p[2]+5*tz],Cc=[p[0],p[1]+17,p[2]];line(A,B,1,0,false);line(A,Cc,1,t=>t*.9,false);line(B,Cc,1,t=>t*.9,false)}}}
+
+const N=bx.length;document.getElementById('count').textContent=N.toLocaleString()+' particles · detailed 3D model';
+const BX=Float32Array.from(bx),BY_=Float32Array.from(by),BZ=Float32Array.from(bz),GRP=Uint8Array.from(grp),FL=Float32Array.from(fl),GL=Float32Array.from(gl);
+
+/* ---------- globe (matched to the balloon by height so the sphere stretches into it) ---------- */
+const RG=175,gp=[];for(let i=0;i<N;i++){const yy=1-2*(i+.5)/N,rr=Math.sqrt(1-yy*yy),t=i*2.39996;gp.push([RG*rr*Math.cos(t),300-RG*yy,RG*rr*Math.sin(t)])}
+const gOrd=gp.map((p,i)=>[p[1]+(rand()-.5)*10,i]).sort((a,b)=>a[0]-b[0]).map(a=>a[1]);
+const bOrd=Array.from({length:N},(_,i)=>[by[i]+(rand()-.5)*4,i]).sort((a,b)=>a[0]-b[0]).map(a=>a[1]);
+const GX=new Float32Array(N),GY=new Float32Array(N),GZ=new Float32Array(N);
+for(let r=0;r<N;r++){const b=bOrd[r],g=gp[gOrd[r]];GX[b]=g[0];GY[b]=g[1];GZ[b]=g[2]}
+const DLY=new Float32Array(N),RR=new Float32Array(N);for(let i=0;i<N;i++){RR[i]=rand();DLY[i]=rand()*.28+(GRP[i]?.12:0)}
+
+/* ---------- extras: moon (behind), birds (orbiting), burner flame ---------- */
+const moon=[];{const IC=[.45,.14],IR=.86;for(let i=0;i<300;i++){const t=rand()*TAU,x=Math.cos(t),y=Math.sin(t);if(Math.hypot(x-IC[0],y-IC[1])>=IR)moon.push([x,y,.9])}
+ for(let i=0;i<260;i++){const t=rand()*TAU,x=IC[0]+IR*Math.cos(t),y=IC[1]+IR*Math.sin(t);if(Math.hypot(x,y)<=1)moon.push([x,y,.9])}
+ for(let i=0;i<260;i++){const t=rand()*TAU,r=Math.sqrt(rand()),x=r*Math.cos(t),y=r*Math.sin(t);if(Math.hypot(x-IC[0],y-IC[1])>IR)moon.push([x,y,.3])}}
+const birds=Array.from({length:8},(_,i)=>({b:rand()*TAU,sp:(.1+rand()*.08)*(i%2?1:-1),R:.78+rand()*.3,y:-.22-rand()*.5,ph:rand()*TAU}));
+const FP=Array.from({length:130},()=>({p:rand(),r:rand()}));
+
+function smooth(x){return x*x*(3-2*x)}
+function resize(){const r=canvas.getBoundingClientRect(),d=Math.min(devicePixelRatio||1,2);canvas.width=Math.round(r.width*d);canvas.height=Math.round(r.height*d);W=canvas.width;H=canvas.height}addEventListener('resize',resize);resize();
+
+const BASE=[236,225,211],ACC=[255,112,84],styles=[];for(let ab=0;ab<8;ab++)for(let gb=0;gb<4;gb++){const f=gb/3,c=BASE.map((v,i)=>Math.round(v+(ACC[i]-v)*f));styles.push(`rgba(${c[0]},${c[1]},${c[2]},${(.14+.86*(ab+1)/8).toFixed(3)})`)}
+
+function render(){
+ ctx.clearRect(0,0,W,H);
+ const s=Math.min(W,H)*.37*zoom,ca=Math.cos(angle),sa=Math.sin(angle),ct=Math.cos(tilt),st=Math.sin(tilt),rad=Math.max(.6,W/1100);
+ const a1=M*(.05*Math.sin(1.5*T)+.02*Math.sin(.67*T+1)),a2=M*(.035*Math.sin(1.2*T+.5)+.015*Math.sin(.5*T));
+ const c1=Math.cos(a1),s1=Math.sin(a1),c2=Math.cos(a2),s2=Math.sin(a2),e1=-.3*a1,e2=-.3*a2,ec1=Math.cos(e1),es1=Math.sin(e1),ec2=Math.cos(e2),es2=Math.sin(e2);
+ const br=1+.015*Math.sin(.9*T)*M,flareV=.1+.9*flare;
+ const proj=(x,y,z)=>{const X=x*K,Y=-(y-300)*K,Z=z*K,xr=X*ca+Z*sa,zr=Z*ca-X*sa,yr=Y*ct-zr*st,zz=Y*st+zr*ct,p=2.8/(2.8-zz*.2);return[W/2+xr*s*p,H/2-yr*s*p,zz,p]};
+
+ // moon (screen-space, behind everything)
+ if(M>.02){const mx=W/2-.74*s,my=H/2+.0*s+Math.sin(T*.4)*3,mr=.27*s;ctx.fillStyle=`rgba(${BASE[0]},${BASE[1]},${BASE[2]},${.55*M})`;ctx.beginPath();for(const p of moon){const x=mx+p[0]*mr,y=my-p[1]*mr,r=rad*(p[2]>.5?1:.7);ctx.moveTo(x+r,y);ctx.arc(x,y,r,0,6.2832)}ctx.fill()}
+
+ const paths=Array.from({length:32},()=>new Path2D());
+ for(let i=0;i<N;i++){
+  const d=DLY[i],m=smooth(Math.max(0,Math.min(1,(M-d)/.6)));
+  let x=GX[i]+(BX[i]-GX[i])*m,y=GY[i]+(BY_[i]-GY[i])*m,z=GZ[i]+(BZ[i]-GZ[i])*m;
+  if(m>0&&m<1){const mid=Math.sin(m*Math.PI),q=RR[i]*40;x+=Math.sin(T*3.1+q)*5*mid+GX[i]*.14*mid*RR[i];y+=Math.cos(T*2.7+q)*5*mid;z+=Math.sin(T*2.3+q)*5*mid+GZ[i]*.14*mid*RR[i]}
+  let yy;
+  if(GRP[i]){const yp=y-288;let xa=x*c1-yp*s1,ya=x*s1+yp*c1,yb=ya*c2-z*s2,zb=ya*s2+z*c2;x=xa;y=yb+288;z=zb}
+  else{x*=1+(br-1)*m;z*=1+(br-1)*m;y=150+(y-150)*(1+(br-1)*m);const yp=y-288;let xa=x*ec1-yp*es1,ya=x*es1+yp*ec1,yb=ya*ec2-z*es2,zb=ya*es2+z*ec2;x=xa;y=yb+288;z=zb}
+  const f=FL[i];if(f>0&&m>0){x+=Math.sin(T*3.3+y*.2)*2*f*m;y+=Math.cos(T*4+x*.09+z*.09)*2.2*f*m;z+=Math.cos(T*3+y*.15)*2*f*m}
+  y-=lift*m;
+  const P=proj(x,y,z),a=Math.max(0,Math.min(1,(P[2]+.62)/1.24)),ab=Math.min(7,Math.floor(a*8)),gb=Math.min(3,Math.floor(GL[i]*flareV*m*4)),r=rad*P[3],path=paths[ab*4+gb];
+  path.moveTo(P[0]+r,P[1]);path.arc(P[0],P[1],r,0,6.2832)
+ }
+ for(let k=0;k<32;k++){ctx.fillStyle=styles[k];ctx.fill(paths[k])}
+
+ // burner flame (inside the mouth)
+ if(M>.85&&flare>.02){const al=(M-.85)/.15*flare;for(const q of FP){const life=(T*1.3+q.p)%1,rr=(1-life)*16*q.r,t=q.p*40+T*2,P=proj(rr*Math.cos(t),290-life*58-lift,rr*Math.sin(t));ctx.fillStyle=`rgba(255,${Math.round(120+90*life)},${Math.round(70+60*life)},${((1-life)*al*.95).toFixed(3)})`;ctx.beginPath();ctx.arc(P[0],P[1],rad*1.1*P[3],0,6.2832);ctx.fill()}}
+
+ // birds orbiting in world space
+ if(M>.05){ctx.fillStyle=`rgba(${BASE[0]},${BASE[1]},${BASE[2]},${.85*M})`;ctx.beginPath();for(const b of birds){const ang=b.b+T*b.sp,cx=b.R*Math.cos(ang),cz=b.R*Math.sin(ang),cy=b.y+.025*Math.sin(T*1.7+b.ph),flap=Math.sin(T*7+b.ph),wl=.05,rx=Math.cos(ang),rz=Math.sin(ang);
+  for(let side=-1;side<=1;side+=2)for(let k=0;k<=6;k++){const u=k/6,X=cx+side*rx*u*wl,Z=cz+side*rz*u*wl,Y=cy+u*wl*.6*flap,zr=Z*ct+ -Y*0,yr=Y*ct-Z*st,zz=Y*st+Z*ct,p=2.8/(2.8-zz*.2),px=W/2+X*s*p,py=H/2-yr*s*p;ctx.moveTo(px+rad*.9*p,py);ctx.arc(px,py,rad*.9*p,0,6.2832)}}ctx.fill()}
+}
+
+function frame(now){
+ const dt=Math.min(.05,(now-lastNow)/1000);lastNow=now;
+ if(!paused)T+=dt;
+ M+=(Mt-M)*(1-Math.exp(-dt*2.2));if(Math.abs(Mt-M)<.0004)M=Mt;
+ const ph=(T%7)/7,auto=ph<.08?ph/.08:Math.exp(-(ph-.08)*5),u=T-burnAt,man=u<0?0:u<.5?u/.5:Math.exp(-(u-.5)*2.5);
+ flare=Math.max(auto,man);lift+=(flare*10-lift)*(1-Math.exp(-dt*.8));
+ if(!paused&&!drag)angle+=.0025*dt*60;
+ render();requestAnimationFrame(frame)}
+requestAnimationFrame(frame);
+
+canvas.addEventListener('pointerdown',e=>{drag=true;lastX=e.clientX;lastY=e.clientY;canvas.setPointerCapture(e.pointerId)});
+canvas.addEventListener('pointermove',e=>{if(!drag)return;angle+=(e.clientX-lastX)*.008;tilt=Math.max(-.9,Math.min(.9,tilt+(e.clientY-lastY)*.006));lastX=e.clientX;lastY=e.clientY});
+canvas.addEventListener('pointerup',()=>drag=false);
+canvas.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.65,Math.min(1.5,zoom-e.deltaY*.001))},{passive:false});
+const tg=document.getElementById('toggle'),mb=document.getElementById('morph');
+tg.onclick=()=>{paused=!paused;tg.textContent=paused?'Resume motion':'Pause motion'};
+mb.onclick=()=>{Mt=Mt?0:1;mb.textContent=Mt?'Morph to globe':'Morph to balloon'};
+document.getElementById('burn').onclick=()=>{burnAt=T};
+if(paused)tg.textContent='Resume motion';
+</script></html>
