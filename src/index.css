@@ -214,8 +214,9 @@ a,
   width: min(82dvh, 66vw);
   --shift-x: 0px;
   --shift-y: 0px;
+  --stage-scale: 1;
   aspect-ratio: 1;
-  transform: translate(calc(-50% + var(--shift-x)), calc(-50% + var(--shift-y)));
+  transform: translate(calc(-50% + var(--shift-x)), calc(-50% + var(--shift-y))) scale(var(--stage-scale));
   pointer-events: none;
   transition: transform 1000ms cubic-bezier(.22, .61, .36, 1);
 }
@@ -1019,7 +1020,9 @@ a,
 }
 
 .state-projects .visual-region {
-  --shift-y: -5dvh;
+  --shift-x: 34vw;
+  --shift-y: -2dvh;
+  width: min(56dvh, 36vw);
 }
 
 .state-journey .visual-region {
@@ -1101,9 +1104,9 @@ a,
 
 .project-evidence {
   position: absolute;
-  left: 50%;
-  top: 47%;
-  width: min(40vw, 54dvh);
+  left: 46%;
+  top: 39%;
+  width: min(34vw, 48dvh);
   transform: translate(-50%, -50%);
   margin: 0;
 }
@@ -1126,7 +1129,7 @@ a,
 .project-summary {
   position: absolute;
   left: 31%;
-  right: var(--edge);
+  right: 32%;
   bottom: 11%;
   display: grid;
   grid-template-columns: minmax(0, .9fr) minmax(0, 1.4fr);
@@ -2255,15 +2258,15 @@ a,
   }
 
   .layout-desktop.state-projects .visual-region {
-    top: 46%;
+    top: 52%;
     --shift-y: 0px;
-    --shift-x: 0px;
-    width: min(100vw, 65dvh);
+    --shift-x: 34vw;
+    width: min(36vw, 56dvh);
   }
 
-  .layout-desktop .project-selector {
+  .layout-desktop.state-projects .project-selector {
     left: var(--edge);
-    right: var(--edge);
+    right: 32%;
     top: 21%;
     width: auto;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2275,9 +2278,10 @@ a,
     padding: 6px;
   }
 
-  .layout-desktop .project-evidence {
+  .layout-desktop.state-projects .project-evidence {
     top: 45%;
-    width: min(80vw, 51dvh);
+    left: 44%;
+    width: min(36vw, 40dvh);
   }
 
   .layout-desktop .project-evidence img {
@@ -2288,9 +2292,9 @@ a,
     font-size: 10px;
   }
 
-  .layout-desktop .project-summary {
+  .layout-desktop.state-projects .project-summary {
     left: var(--edge);
-    right: var(--edge);
+    right: 32%;
     bottom: 13%;
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: "status" "title" "details" "tech" "scope";
@@ -2825,4 +2829,81 @@ a,
   .destination-about {
     top: 36%;
   }
+}
+
+@media (min-width: 901px) {
+  .state-about .visual-region {
+    --shift-x: 32vw;
+    --shift-y: 33dvh;
+    --stage-scale: 2.15;
+  }
+
+  .state-about .motion-toggle {
+    padding-right: 8px;
+    background: #130f10ec;
+  }
+
+  .state-about .back-home {
+    left: var(--edge);
+    top: 86%;
+    transform: translateY(-50%);
+  }
+}
+
+@media (min-width: 901px) and (max-height: 700px) {
+  .state-about .visual-region {
+    --shift-x: 30vw;
+    --shift-y: 31dvh;
+    --stage-scale: 2;
+  }
+}
+
+@media (min-width: 901px) and (max-height: 500px) {
+  .state-about .visual-region {
+    --shift-x: 34vw;
+    --stage-scale: 2.25;
+  }
+
+  .state-about .back-home {
+    left: 56%;
+    top: 88%;
+    transform: translate(-50%, -50%);
+  }
+}
+
+@media (max-width: 420px) and (min-height: 501px) and (max-height: 600px) {
+  .state-about .visual-region {
+    width: 74vw;
+    --shift-y: -13dvh;
+  }
+}
+
+/* Temporary frontal inspection view for the supplied balloon target. */
+.portfolio-shell.debug-balloon {
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.debug-balloon .portfolio-main {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+}
+
+.debug-balloon .site-header,
+.debug-balloon .presentation-state,
+.debug-balloon .site-footer {
+  display: none;
+}
+
+.portfolio-shell.debug-balloon .visual-region {
+  left: 50%;
+  top: 50%;
+  width: min(76dvh, 88vw);
+  --shift-x: 0px;
+  --shift-y: 0px;
+  --stage-scale: 1;
+  transition: none;
 }

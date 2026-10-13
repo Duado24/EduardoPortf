@@ -1,4 +1,5 @@
 import globeSamples from './globe-samples.json' with { type: 'json' }
+import balloonSamples from './balloon-samples.json' with { type: 'json' }
 import { createSymbolTarget } from './symbolTargets.js'
 
 export const MAX_PARTICLES = 5600
@@ -77,6 +78,8 @@ export function createShapeTargets(count = MAX_PARTICLES) {
   const globeStyle = new Float32Array(count * 2)
   const about = new Float32Array(count * 3)
   const aboutStyle = new Float32Array(count * 2)
+  const projects = Float32Array.from(balloonSamples.positions.slice(0, count * 3))
+  const projectStyle = new Float32Array(count * 2)
   let profileCandidate = 1
 
   for (let i = 0; i < count; i++) {
@@ -93,12 +96,14 @@ export function createShapeTargets(count = MAX_PARTICLES) {
     } while (!insideAboutShape(x, y))
     about.set([x, y, (radicalInverse(i + 1, 5) - 0.5) * 0.08], i * 3)
     aboutStyle.set([0.57 + radicalInverse(i + 1, 7) * 0.32, 0], i * 2)
+    projectStyle.set([0.98, 0], i * 2)
   }
 
   return {
     home: { positions: globe, style: globeStyle },
     about: { positions: about, style: aboutStyle },
-    ...Object.fromEntries(['projects', 'journey', 'skills', 'contact'].map((state) => [state, createSymbolTarget(state, count)])),
+    projects: { positions: projects, style: projectStyle },
+    ...Object.fromEntries(['journey', 'skills', 'contact'].map((state) => [state, createSymbolTarget(state, count)])),
   }
 }
 

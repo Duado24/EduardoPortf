@@ -61,7 +61,7 @@ const fragmentShader = /* glsl */ `
   }
 `
 
-export function createParticleRenderer({ canvas, container, section, motionPaused, reducedMotion, onUnavailable }) {
+export function createParticleRenderer({ canvas, container, section, motionPaused, reducedMotion, onUnavailable, onMorphFrame }) {
   const mobile = window.matchMedia('(max-width: 760px)').matches
   const count = mobile ? MOBILE_PARTICLES : MAX_PARTICLES
   const targets = createShapeTargets(count)
@@ -121,17 +121,34 @@ export function createParticleRenderer({ canvas, container, section, motionPause
   let lastFrame = 0
   let elapsed = 0
   let duration = mobile ? 450 : 1000
+  let transitionDuration = duration
   let transitioning = false
+  let sourceRotation = 0
+  let targetRotation = 0
+  let lastGlobeRotation = 0
   let sourceGlobe = initialState === 'home' ? 1 : 0
   let targetGlobe = sourceGlobe
+  let projectWeight = initialState === 'projects' ? 1 : 0
+  let sourceProject = projectWeight
+  let targetProject = projectWeight
+  let projectPhase = 0
   let inViewport = true
   let performanceDrawLimit = count
   let slowFrames = 0
   let performanceTier = 0
   let frameInterval = 1000 / 30
+  let pointDpr = 1
+  let pointBaseCss = mobile ? 1.9 : 2.15
 
   function canAnimate() {
-    return !disposed && !document.hidden && inViewport && !paused && !reduced && (transitioning || currentState === 'home')
+    return !disposed && !document.hidden && inViewport && !paused && !reduced &&
+      (transitioning || currentState === 'home' || currentState === 'projects')
+  }
+
+  function positionProject() {
+    points.rotation.z = Math.sin(projectPhase * 0.72) * 0.018 * projectWeight
+    points.position.y = (Math.sin(projectPhase * 1.05) * 0.024 + Math.sin(projectPhase * 0.43) * 0.009) * projectWeight
+    material.uniforms.uPointSize.value = (pointBaseCss + (1.5 - pointBaseCss) * projectWeight) * pointDpr
   }
 
   function draw() {
@@ -141,7 +158,11 @@ export function createParticleRenderer({ canvas, container, section, motionPause
   function finishTransition() {
     material.uniforms.uMorph.value = 1
     material.uniforms.uGlobeWeight.value = targetGlobe
+    material.uniforms.uRotation.value = targetRotation
+    projectWeight = targetProject
+    positionProject()
     transitioning = false
+    onMorphFrame?.(1)
   }
 
   function schedule() {
@@ -158,15 +179,21 @@ export function createParticleRenderer({ canvas, container, section, motionPause
     }
     lastFrame = timestamp
     const delta = Math.min(difference, 100)
+    if (projectWeight || targetProject) projectPhase += delta / 1000
     if (transitioning) {
       elapsed += delta
-      const progress = smoothProgress(elapsed / duration)
+      const progress = smoothProgress(elapsed / transitionDuration)
       material.uniforms.uMorph.value = progress
       material.uniforms.uGlobeWeight.value = sourceGlobe + (targetGlobe - sourceGlobe) * progress
-      if (elapsed >= duration) finishTransition()
+      material.uniforms.uRotation.value = sourceRotation + (targetRotation - sourceRotation) * progress
+      projectWeight = sourceProject + (targetProject - sourceProject) * progress
+      onMorphFrame?.(progress)
+      if (elapsed >= transitionDuration) finishTransition()
     } else if (currentState === 'home') {
       material.uniforms.uRotation.value += delta / 1000 * HOME_ROTATION_SPEED
+      lastGlobeRotation = material.uniforms.uRotation.value
     }
+    positionProject()
 
     const renderStarted = performance.now()
     draw()
@@ -210,28 +237,36 @@ export function createParticleRenderer({ canvas, container, section, motionPause
     camera.top = halfHeight
     camera.bottom = -halfHeight
     camera.updateProjectionMatrix()
-    material.uniforms.uPointSize.value = (narrow ? 1.9 : 2.15) * dpr
+    pointDpr = dpr
+    pointBaseCss = narrow ? 1.9 : 2.15
+    positionProject()
     geometry.setDrawRange(0, Math.min(performanceDrawLimit, narrow ? MOBILE_PARTICLES : count))
     duration = narrow ? 450 : 1000
     draw()
   }
 
-  function setSection(nextSection) {
+  function setSection(nextSection, durationOverride) {
     if (disposed) return
     const nextState = visualState(nextSection)
-    if (nextState === currentState) return
+    if (nextState === currentState && !transitioning) return
     const uniforms = material.uniforms
-    snapshotMorph(source, target, uniforms.uMorph.value, uniforms.uRotation.value, source)
+    snapshotMorph(source, target, uniforms.uMorph.value, 0, source)
     snapshotStyle(sourceStyle, targetStyle, uniforms.uMorph.value, sourceStyle)
     target.set(targets[nextState].positions)
     targetStyle.set(targets[nextState].style)
     for (const name of ['position', 'aTarget', 'aSourceStyle', 'aTargetStyle']) geometry.attributes[name].needsUpdate = true
     sourceGlobe = uniforms.uGlobeWeight.value
     targetGlobe = nextState === 'home' ? 1 : 0
-    uniforms.uRotation.value = 0
+    sourceProject = projectWeight
+    targetProject = nextState === 'projects' ? 1 : 0
+    sourceRotation = Math.atan2(Math.sin(uniforms.uRotation.value), Math.cos(uniforms.uRotation.value))
+    uniforms.uRotation.value = sourceRotation
+    if (currentState === 'home') lastGlobeRotation = sourceRotation
+    targetRotation = nextState === 'home' ? lastGlobeRotation : 0
     uniforms.uMorph.value = 0
     currentState = nextState
     elapsed = 0
+    transitionDuration = durationOverride ?? duration
     transitioning = true
     if (paused || reduced) finishTransition()
     draw()

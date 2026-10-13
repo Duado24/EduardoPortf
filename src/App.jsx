@@ -22,6 +22,7 @@ const sections = {
 };
 
 export default function App() {
+  const debugBalloon = new URLSearchParams(window.location.search).get('debug') === 'balloon';
   const mainRef = useRef(null);
   const contentRef = useRef(null);
   const mobileLayout = useMobileLayout();
@@ -59,7 +60,7 @@ export default function App() {
   }
 
   return (
-    <div className={`portfolio-shell state-${section} layout-${mobileLayout ? 'mobile' : 'desktop'}${motionEnabled ? ' motion-enabled' : ''}`}>
+    <div className={`portfolio-shell state-${section} layout-${mobileLayout ? 'mobile' : 'desktop'}${motionEnabled ? ' motion-enabled' : ''}${debugBalloon ? ' debug-balloon' : ''}`}>
       <a className="skip-link" href="#main-content" onClick={skipToContent}>Skip to content</a>
       <Header section={section} onNavigate={onNavigate} />
       <main id="main-content" className="portfolio-main" ref={mainRef} tabIndex={-1}>
@@ -67,9 +68,10 @@ export default function App() {
           <ParticleBoundary>
             <Suspense fallback={<div className="particle-loading" />}>
               <ParticleStage
-                section={section}
+                section={debugBalloon ? 'projects' : section === 'about' ? 'home' : section}
+                visualSection={debugBalloon ? 'projects' : section}
                 reducedMotion={reducedMotion}
-                motionPaused={motionPaused}
+                motionPaused={debugBalloon || motionPaused}
                 onRendererChange={setRendererMode}
               />
             </Suspense>

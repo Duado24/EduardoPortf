@@ -9,7 +9,7 @@ import {
 
 // This renderer has no GPU dependency. The same points and interruption model
 // remain animated when WebGL is unavailable, including ordinary Chrome software rendering.
-export function createCanvasParticleRenderer({ canvas, container, section, motionPaused, reducedMotion, lowPower = false }) {
+export function createCanvasParticleRenderer({ canvas, container, section, motionPaused, reducedMotion, lowPower = false, onMorphFrame }) {
   const context = canvas.getContext('2d', { alpha: true })
   if (!context) throw new Error('Canvas drawing is unavailable.')
   const mobile = window.matchMedia('(max-width: 760px)').matches
@@ -33,11 +33,19 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
   let elapsed = 0
   let transitioning = false
   let duration = mobile ? 450 : 1000
+  let transitionDuration = duration
   let morph = 1
   let rotation = 0
+  let sourceRotation = 0
+  let targetRotation = 0
+  let lastGlobeRotation = 0
   let globeWeight = currentState === 'home' ? 1 : 0
   let sourceGlobe = globeWeight
   let targetGlobe = globeWeight
+  let projectWeight = currentState === 'projects' ? 1 : 0
+  let sourceProject = projectWeight
+  let targetProject = projectWeight
+  let projectPhase = 0
   let inViewport = true
   let width = 1
   let height = 1
@@ -48,7 +56,8 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
   let slowFrames = 0
 
   function canAnimate() {
-    return !disposed && !document.hidden && inViewport && !paused && !reduced && (transitioning || currentState === 'home')
+    return !disposed && !document.hidden && inViewport && !paused && !reduced &&
+      (transitioning || currentState === 'home' || currentState === 'projects')
   }
 
   function draw() {
@@ -57,6 +66,11 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
     for (const bucket of buckets) bucket.length = 0
     const cosine = Math.cos(rotation)
     const sine = Math.sin(rotation)
+    const sway = Math.sin(projectPhase * 0.72) * 0.018 * projectWeight
+    const swayCosine = Math.cos(sway)
+    const swaySine = Math.sin(sway)
+    const float = (Math.sin(projectPhase * 1.05) * 0.024 + Math.sin(projectPhase * 0.43) * 0.009) * projectWeight
+    const radius = pointRadius + (0.75 - pointRadius) * projectWeight
     for (let i = 0; i < drawCount; i++) {
       const p = i * 3
       const s = i * 2
@@ -71,7 +85,9 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
       const opacity = brightness * (1 + (depth - 1) * globeWeight)
       if (opacity < 0.025) continue
       const bucket = buckets[(accent > 0.35 ? 10 : 0) + Math.min(9, Math.max(0, Math.round(opacity * 10) - 1))]
-      bucket.push(width / 2 + rotatedX * scale, height / 2 - y * scale, pointRadius * (1 + accent * 0.2))
+      bucket.push(width / 2 + (rotatedX * swayCosine - y * swaySine) * scale,
+        height / 2 - (rotatedX * swaySine + y * swayCosine + float) * scale,
+        radius * (1 + accent * 0.2))
     }
     // At most twenty fills per frame rather than changing style/filling per dot.
     for (let i = 0; i < buckets.length; i++) {
@@ -92,8 +108,11 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
 
   function finishTransition() {
     morph = 1
+    rotation = targetRotation
     globeWeight = targetGlobe
+    projectWeight = targetProject
     transitioning = false
+    onMorphFrame?.(1)
   }
 
   function schedule() {
@@ -110,13 +129,18 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
     }
     lastFrame = timestamp
     const delta = Math.min(difference, 100)
+    if (projectWeight || targetProject) projectPhase += delta / 1000
     if (transitioning) {
       elapsed += delta
-      morph = smoothProgress(elapsed / duration)
+      morph = smoothProgress(elapsed / transitionDuration)
+      rotation = sourceRotation + (targetRotation - sourceRotation) * morph
       globeWeight = sourceGlobe + (targetGlobe - sourceGlobe) * morph
-      if (elapsed >= duration) finishTransition()
+      projectWeight = sourceProject + (targetProject - sourceProject) * morph
+      onMorphFrame?.(morph)
+      if (elapsed >= transitionDuration) finishTransition()
     } else if (currentState === 'home') {
       rotation += delta / 1000 * HOME_ROTATION_SPEED
+      lastGlobeRotation = rotation
     }
     const started = performance.now()
     draw()
@@ -154,20 +178,26 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
     draw()
   }
 
-  function setSection(nextSection) {
+  function setSection(nextSection, durationOverride) {
     if (disposed) return
     const nextState = visualState(nextSection)
-    if (nextState === currentState) return
-    snapshotMorph(source, target, morph, rotation, source)
+    if (nextState === currentState && !transitioning) return
+    snapshotMorph(source, target, morph, 0, source)
     snapshotStyle(sourceStyle, targetStyle, morph, sourceStyle)
     target.set(targets[nextState].positions)
     targetStyle.set(targets[nextState].style)
     sourceGlobe = globeWeight
     targetGlobe = nextState === 'home' ? 1 : 0
+    sourceProject = projectWeight
+    targetProject = nextState === 'projects' ? 1 : 0
+    sourceRotation = Math.atan2(Math.sin(rotation), Math.cos(rotation))
+    rotation = sourceRotation
+    if (currentState === 'home') lastGlobeRotation = sourceRotation
+    targetRotation = nextState === 'home' ? lastGlobeRotation : 0
     currentState = nextState
-    rotation = 0
     morph = 0
     elapsed = 0
+    transitionDuration = durationOverride ?? duration
     transitioning = true
     if (paused || reduced) finishTransition()
     draw()

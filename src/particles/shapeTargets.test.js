@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import balloonSamples from './balloon-samples.json' with { type: 'json' }
 import {
   createShapeTargets,
   geographicPosition,
@@ -74,9 +75,13 @@ test('all six states have deterministic finite targets at desktop and fallback c
   assert.equal(visualState('unknown'), 'home')
 })
 
-test('the terminal keeps its center open for authentic project media', () => {
-  const terminal = createShapeTargets(5600).projects.positions
-  for (let i = 0; i < terminal.length; i += 3) {
-    assert.ok(Math.abs(terminal[i]) > 0.85 || terminal[i + 1] > 0.37 || terminal[i + 1] < -0.55)
-  }
+test('the supplied balloon design survives the smallest animated Canvas particle budget', () => {
+  const positions = createShapeTargets(900).projects.positions
+  assert.deepEqual(Array.from(positions), Array.from(Float32Array.from(balloonSamples.positions.slice(0, 900 * 3))))
+  const groups = new Set(balloonSamples.groups.slice(0, 900))
+  const paths = new Set(balloonSamples.shapeIds.slice(0, 900))
+  assert.equal(groups.size, Object.keys(balloonSamples.groupNames).length)
+  assert.equal(paths.size, new Set(balloonSamples.shapeIds).size)
+  assert.ok(positions.some((value, index) => index % 3 === 1 && value > 0.9), 'The envelope crown is present.')
+  assert.ok(positions.some((value, index) => index % 3 === 1 && value < -0.85), 'The tower base is present.')
 })
