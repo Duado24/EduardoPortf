@@ -23,7 +23,7 @@ export const projects = [
       'Supported formatting corrections require review and approval.',
     technologies: ['React', 'Vite', 'Python', 'FastAPI', 'Canvas REST API'],
     media: {
-      src: 'project-media/autocanv.webp',
+      src: 'dist/project-media/AutoCanvT.png',
       width: 1440,
       height: 960,
       alt: 'AutoCanv tab scanner with offline synthetic demonstration content, review counts, and a searchable content list.',

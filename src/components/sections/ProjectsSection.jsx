@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { autoCanvWorkflow, projects } from '../../data/portfolio';
+import TemplateCarousel from '../templateCarousel/TemplateCarousel';
 import './ProjectsSection.css';
 
 const compactBuild = {
@@ -15,6 +16,7 @@ export default function ProjectsSection() {
   const mediaDialog = useRef(null);
   const closeDialogButton = useRef(null);
   const tabRefs = useRef([]);
+  const isTemplates = project.id === 'ensign-templates';
   const selectedIndex = projects.findIndex((entry) => entry.id === selectedId);
 
   function handleTabKey(event, index) {
@@ -73,7 +75,7 @@ export default function ProjectsSection() {
         <article className="projects-panel" id={`project-panel-${entry.id}`} key={entry.id}
           role="tabpanel" aria-labelledby={`project-tab-${entry.id}`} tabIndex={0} hidden={entry.id !== selectedId}>
           {entry.id === selectedId && <>
-            {project.media && <figure className="projects-preview">
+            {isTemplates ? <TemplateCarousel /> : project.media && <figure className="projects-preview">
               <button className="projects-preview-open" type="button" onClick={openMedia} aria-label={`Enlarge ${project.name} visual`}>
                 <img src={`${import.meta.env.BASE_URL}${project.media.src}`} alt={project.media.alt}
                   width={project.media.width} height={project.media.height} decoding="async" />
@@ -98,16 +100,16 @@ export default function ProjectsSection() {
                 {project.technologies.map((technology) => <li key={technology}>{technology}</li>)}
               </ul>
               <div className="projects-actions">
-                {project.media && <button type="button" className="projects-image-action" onClick={openMedia}>View project visual <span aria-hidden="true">↗</span></button>}
+                {!isTemplates && project.media && <button type="button" className="projects-image-action" onClick={openMedia}>View project visual <span aria-hidden="true">↗</span></button>}
                 {project.scope && <p className="projects-scope">{project.scope}</p>}
               </div>
-              {project.media && <p className="projects-compact-caption">{project.media.caption}</p>}
+              {!isTemplates && project.media && <p className="projects-compact-caption">{project.media.caption}</p>}
             </div>
           </>}
         </article>
       ))}
       <a className="projects-back" href="#home"><span aria-hidden="true">←</span> Back to Home</a>
-      {project.media && (
+      {!isTemplates && project.media && (
         <dialog className="projects-media-dialog" ref={mediaDialog} aria-labelledby="projects-media-heading"
           onClick={(event) => { if (event.target === event.currentTarget) mediaDialog.current?.close(); }}>
           <div className="projects-media-header">

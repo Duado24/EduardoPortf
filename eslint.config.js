@@ -4,7 +4,8 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 
 export default [
-  { ignores: ['dist', 'node_modules', 'references', 'src/particles/data'] },
+  // Supplied vendor modules are copied verbatim; lint the React adapter normally.
+  { ignores: ['dist', 'node_modules', 'references', 'src/particles/data', 'src/components/templateCarousel/templateCarousel.js', 'src/components/templateCarousel/templates.data.js'] },
   {
     files: ['**/*.{js,jsx}'],
     languageOptions: {
