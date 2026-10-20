@@ -11,7 +11,7 @@ export default function HomeSection() {
         
         <p className="role-line">
           
-          <span className="copy-full">Software Engineer Student<br />Front-End · Automation · Systems</span>
+          <span className="copy-full">Software Engineer Student<br />Front-End · Back-End · Application Development</span>
           <span className="copy-compact">Software Engineering Student</span>
         </p>
       </div>
