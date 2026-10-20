@@ -23,7 +23,7 @@ export const projects = [
       'Supported formatting corrections require review and approval.',
     technologies: ['React', 'Vite', 'Python', 'FastAPI', 'Canvas REST API'],
     media: {
-      src: 'dist/project-media/AutoCanvT.png',
+      src: 'project-media/AutoCanvT.png',
       width: 1440,
       height: 960,
       alt: 'AutoCanv tab scanner with offline synthetic demonstration content, review counts, and a searchable content list.',
@@ -99,28 +99,28 @@ export const autoCanvWorkflow = [
 
 export const journey = [
   {
-    id: 'ensign-work',
-    label: 'Ensign · Work',
-    compactDescription: 'Canvas modules, reusable HTML/CSS, and usability reviews.',
-    title: 'Instructional Design Assistant',
-    organization: 'Ensign College',
-    date: 'April 2025 — Present',
+    id: 'lima-education',
+    label: 'Lima · coursework',
+    compactDescription: 'International Business foundations before software engineering.',
+    title: 'International Business',
+    organization: 'Lima University · Peru',
+    date: '2023',
     description:
-      'Build and update Canvas modules with instructional designers, using HTML/CSS and usability reviews to improve layouts and navigation.',
+      'Foundational coursework before transitioning toward software engineering.',
   },
   {
-    id: 'cyberforce-preparation',
-    label: 'CyberForce',
-    compactDescription: 'Database and Web/NFS preparation · in progress.',
-    title: 'DOE CyberForce',
-    organization: 'Infrastructure preparation',
-    date: 'Current · In progress',
+    id: 'net-axes',
+    label: 'Net Axes · sales',
+    compactDescription: 'Client communication and practical problem-solving.',
+    title: 'Sales Advisor',
+    organization: 'Net Axes S.A.C',
+    date: 'January 2022 — December 2023',
     description:
-      'Preparing database and Web/NFS systems through administration, service baselining, access controls, and troubleshooting.',
+      'Built customer communication experience in a sales role.',
   },
   {
     id: 'ensign-education',
-    label: 'Ensign · Study',
+    label: 'Ensign · study',
     compactDescription: 'Bachelor of Applied Science · expected 2029.',
     title: 'Software Engineering',
     organization: 'Ensign College',
@@ -129,36 +129,38 @@ export const journey = [
       'Bachelor of Applied Science, with studies in software development, algorithms, and data analysis.',
   },
   {
+    id: 'ensign-work',
+    label: 'Ensign · work',
+    compactDescription: 'Canvas templates, HTML/CSS, accessibility, and usability.',
+    title: 'Instructional Design Assistant',
+    organization: 'Ensign College',
+    date: 'April 2025 — Present',
+    description:
+      'Create reusable Canvas templates and layouts with HTML/CSS, with attention to accessibility and usability.',
+  },
+  {
     id: 'volunteer',
     label: 'Volunteer',
     compactDescription: 'Spanish–English translation and interpretation.',
     title: 'Volunteer Interpreter',
     organization: 'No More A Stranger Foundation',
-    date: 'Volunteer experience',
+    date: 'Undated volunteer experience',
     description:
       'Help Spanish-speaking immigrants communicate through translation and interpretation.',
   },
   {
-    id: 'net-axes',
-    title: 'Sales Advisor',
-    organization: 'Net Axes S.A.C',
-    date: 'January 2022 — December 2023',
+    id: 'cyberforce-preparation',
+    label: 'CyberForce · prep',
+    compactDescription: 'Database and Web/NFS preparation · in progress.',
+    title: 'DOE CyberForce',
+    organization: 'Infrastructure preparation',
+    date: '2026 · In progress',
     description:
-      'Built customer communication experience in a sales role.',
-  },
-  {
-    id: 'lima-education',
-    label: 'Lima · Coursework',
-    compactDescription: 'International Business foundations before software engineering.',
-    title: 'International Business',
-    organization: 'Lima University · Peru',
-    date: '2023',
-    description:
-      'Foundational coursework before transitioning toward software engineering.',
+      'Preparing database and Web/NFS systems through administration, service baselining, access controls, and troubleshooting.',
   },
 ];
 
-export const journeyNodes = journey.filter((entry) => entry.id !== 'net-axes');
+export const journeyNodes = journey;
 
 export const skillGroups = [
   {

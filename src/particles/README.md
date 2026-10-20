@@ -1,9 +1,13 @@
 # Persistent particle portfolio
 
-All six routes use one shared point interface: geographic globe on Home/About,
-volumetric aerostatic globe on Projects, route/compass, connected chip, and envelope.
-Normal WebGL frames change uniforms, not React state or every vertex. Navigation
-uploads targets once; interrupted transitions snapshot current rendered positions.
+All six sections use one shared point interface: geographic globe on Home/About,
+volumetric aerostatic globe on Projects, a subdued constellation route on Journey,
+a connected chip on Skills, and an envelope on Contact. Journey's full sky,
+landscape, and selectable milestone anchors are static SVG and semantic HTML over
+that same renderer; there is no second WebGL context or continuous scene loop.
+Its visual coordinates stay separate from the factual milestone data. Normal
+WebGL frames change uniforms, not React state or every vertex. Navigation uploads
+targets once; interrupted transitions snapshot current rendered positions.
 
 WebGL begins with 5,600 desktop / 1,800 smaller-screen dots and capped DPR.
 Ordinary desktop morphs last 1,000ms; smaller-screen morphs last 450ms. World ↔

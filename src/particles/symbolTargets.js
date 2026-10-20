@@ -45,16 +45,14 @@ const projectStrokes = [
   ...polyline([[-0.28, -0.59], [0, -0.47], [0.28, -0.59], [0.23, -0.9], [-0.23, -0.9], [-0.28, -0.59]], 0.055),
 ]
 
+const journeyNodes = [
+  [-0.88, -0.45], [-0.61, 0.12], [-0.34, -0.25], [-0.08, 0.34],
+  [0.19, -0.04], [0.46, 0.47], [0.82, 0.18],
+]
+
 const journeyStrokes = [
-  ...polyline([[-0.86, -0.65], [-0.84, -0.35], [-0.65, -0.1], [-0.34, 0.01], [-0.12, 0.27], [0.21, 0.32], [0.48, 0.62], [0.8, 0.8]], 0.065),
-  circle([-0.86, -0.65], 0.095, 0.05),
-  circle([-0.34, 0.01], 0.09, 0.05),
-  circle([0.21, 0.32], 0.09, 0.05),
-  circle([0.8, 0.8], 0.095, 0.05, 0.6),
-  circle([0.5, -0.51], 0.34, 0.055),
-  ...polyline([[0.63, -0.24], [0.4, -0.52], [0.37, -0.78], [0.61, -0.5], [0.63, -0.24]], 0.065),
-  line([0.28, -0.51], [0.34, -0.51], 0.035),
-  line([0.66, -0.51], [0.72, -0.51], 0.035),
+  ...polyline(journeyNodes, 0.035),
+  ...journeyNodes.map((point, index) => circle(point, 0.026, 0.022, index === journeyNodes.length - 1 ? 0.6 : 0)),
 ]
 
 const skillStrokes = [
@@ -129,7 +127,10 @@ export function createSymbolTarget(state, count) {
       y = stroke.start[1] + dy * t + dx / stroke.length * offset
     }
     positions.set([x, y, (radicalInverse(i + 1, 5) - 0.5) * 0.055], i * 3)
-    style.set([0.45 + radicalInverse(i + 1, 7) * 0.4, stroke.accent], i * 2)
+    const brightness = state === 'journey'
+      ? 0.22 + radicalInverse(i + 1, 7) * 0.2
+      : 0.45 + radicalInverse(i + 1, 7) * 0.4
+    style.set([brightness, stroke.accent], i * 2)
   }
   return { positions, style }
 }

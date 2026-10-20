@@ -18,7 +18,14 @@ Open `http://localhost:5173/EduardoPortf/` (or the URL printed by Vite). Destina
 around the globe and the ordinary navigation both work. Each section supports a
 direct hash such as `#projects`; browser Back/Forward and Escape work too.
 Projects show one selected project. Click its visual to inspect it at larger size.
-Journey has five selectable nodes. Contact includes a source-verified résumé PDF.
+Journey presents six verified experiences as an interactive constellation, with
+keyboard and touch selection. Its Peru-inspired southern sky is an artistic scene,
+not a date-, time-, or location-specific star chart; the existing particle
+renderer remains the shared transition layer. Static SVG provides the sky and
+Andean horizon; semantic HTML buttons provide the milestone controls, so the
+scene adds no second renderer or continuous animation. Star coordinates are
+separate from the factual milestone data. Contact includes a source-verified résumé
+PDF.
 
 ```sh
 npm test

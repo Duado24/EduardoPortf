@@ -100,7 +100,6 @@ export default function ProjectsSection() {
                 {project.technologies.map((technology) => <li key={technology}>{technology}</li>)}
               </ul>
               <div className="projects-actions">
-                {!isTemplates && project.media && <button type="button" className="projects-image-action" onClick={openMedia}>View project visual <span aria-hidden="true">↗</span></button>}
                 {project.scope && <p className="projects-scope">{project.scope}</p>}
               </div>
               {!isTemplates && project.media && <p className="projects-compact-caption">{project.media.caption}</p>}

@@ -110,8 +110,6 @@
 .projects-copy-compact { display: none; }
 .projects-technologies { display: flex; flex-wrap: wrap; gap: 5px 7px; list-style: none; margin: 0; padding: 0; color: var(--body); font: 11px/1.4 var(--mono); }
 .projects-technologies li { padding: 3px 7px; border: 1px solid #c2b2a92a; border-radius: 3px; }
-.projects-image-action { display: inline-flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 44px; padding: 9px 13px; border: 1px solid #dc807945; border-radius: 4px; color: var(--ink); background: #31202380; font-size: 13px; cursor: pointer; }
-.projects-image-action:hover { background: #312023; border-color: var(--accent); }
 .projects-scope { margin: 10px 0 0; color: var(--body); font-size: 12px; line-height: 1.5; }
 .projects-compact-caption { display: none; }
 .projects-back { display: inline-flex; align-items: center; gap: 10px; justify-self: start; min-height: 28px; color: var(--body); font: 12px/1.5 var(--mono); text-decoration: none; }
@@ -153,7 +151,6 @@
   .projects-subtitle, .projects-workflow { display: none; }
   .projects-details { font-size: 13px; gap: 12px; line-height: 1.5; }
   .projects-scope { font-size: 11px; margin-top: 7px; }
-  .projects-image-action { min-height: 38px; }
 }
 
 @media (max-width: 1100px) and (min-height: 651px) {
@@ -166,7 +163,6 @@
   .layout-desktop .projects-details { grid-area: details; font-size: 13px; gap: 10px; }
   .layout-desktop .projects-technologies { grid-area: tech; font-size: 10px; }
   .layout-desktop .projects-actions { grid-area: actions; display: flex; align-items: center; gap: 16px; }
-  .layout-desktop .projects-image-action { flex: none; }
   .layout-desktop .projects-scope { margin: 0; font-size: 11px; }
   .layout-desktop .projects-story h2 { font-size: 24px; }
   .layout-desktop .projects-subtitle, .layout-desktop .projects-copy-full { display: none; }
@@ -231,7 +227,6 @@
   .layout-desktop .projects-identity { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
   .layout-desktop .projects-story h2 { order: -1; margin: 0; font-size: 18px; }
   .layout-desktop .projects-details { font-size: 12px; }
-  .layout-desktop .projects-image-action { min-height: 30px; padding: 4px 10px; font-size: 12px; }
   .layout-desktop .projects-technologies, .layout-desktop .projects-compact-caption, .layout-desktop .projects-back { display: none; }
 }
 
@@ -277,7 +272,6 @@
 .layout-mobile .projects-technologies { font-size: 11px; }
 .layout-mobile .projects-workflow { display: flex; }
 .layout-mobile .projects-compact-caption { display: none; }
-.layout-mobile .projects-image-action { min-height: 44px; }
 .layout-mobile .projects-back { grid-row: 5; display: inline-flex; min-height: 44px; margin-top: 4px; }
 
 @media (max-width: 450px) {
