@@ -11,6 +11,8 @@ import {
   Scene,
   ShaderMaterial,
   SRGBColorSpace,
+  Vector3,
+  Vector4,
   WebGLRenderer,
 } from 'three'
 import {
@@ -22,9 +24,16 @@ import {
   visualState,
 } from './shapeTargets.js'
 import { sampleMorph, sampleMorphValues } from './aerostaticTransition.js'
+import { placeWatch, WATCH_CAMERA, watchFlare, watchLayout } from './watchTarget.js'
+
+// Journey and Skills share the full-screen sky region and its slow transitions.
+const SKY_STATES = ['journey', 'skills']
+const DEFAULT_FLAME = [1, 0.7, 0.42]
 
 const vertexShader = /* glsl */ `
   attribute vec3 aTarget;
+  attribute vec4 aWatchA;
+  attribute vec4 aWatchB;
   attribute float aSourceSize;
   attribute float aTargetSize;
   attribute vec2 aSourceStyle;
@@ -38,15 +47,97 @@ const vertexShader = /* glsl */ `
   uniform float uRotation;
   uniform float uPitch;
   uniform float uPointSize;
+  uniform float uSourceLift;
+  uniform float uTargetLift;
+  uniform float uIdle;
+  uniform float uTime;
+  uniform float uFlare;
+  uniform vec3 uFlameColor;
+  uniform vec3 uWatchTarget;
+  uniform vec4 uWatchCamera;
+  uniform vec3 uWatchLayout;
   varying float vOpacity;
   varying float vAccent;
   varying float vProject;
+  varying vec4 vWatch;
+
+  // The Last Watch camera (fixed, mirrored), placed in shared camera units; see watchTarget.js.
+  vec3 watchView(vec3 q) {
+    q -= uWatchTarget;
+    q = vec3(q.x * uWatchCamera.x + q.z * uWatchCamera.y, q.y, -q.x * uWatchCamera.y + q.z * uWatchCamera.x);
+    q = vec3(q.x, q.y * uWatchCamera.z - q.z * uWatchCamera.w, q.y * uWatchCamera.w + q.z * uWatchCamera.z);
+    float w = 4.6 + q.z;
+    return vec3(uWatchLayout.x - q.x / w * uWatchLayout.z, uWatchLayout.y + q.y / w * uWatchLayout.z, w);
+  }
 
   void main() {
     float m = uMorph;
     if (uDirection > 0.5) m = smoothstep(aDelay, min(0.98, aDelay + 0.60), uMorph);
     if (uDirection < -0.5) m = 1.0 - smoothstep(aDelay, min(0.98, aDelay + 0.60), 1.0 - uMorph);
-    vec3 p = mix(position, aTarget, m);
+    // The Journey/Skills descent: the sky's points rise away while the bonfire rises into view.
+    vec3 p = mix(position + vec3(0.0, uSourceLift, 0.0), aTarget + vec3(0.0, uTargetLift, 0.0), m);
+
+    // Skills: the reference's fire lighting and fire effects; mirrors watchShade() in watchTarget.js.
+    // Kinds: 0 ground, 1 flame, 2 spark, 3 smoke, 4 dust, 5 metal, 6 cloth, 7 wood, 8 ember.
+    vec4 watch = vec4(0.949, 0.922, 0.882, 1.0);
+    float watchSize = 1.0;
+    if (uIdle > 0.001) {
+      float kind = aWatchA.x;
+      float sd = aWatchA.y;
+      float tn = aWatchA.z;
+      float intensity = (1.0 + 0.16 * sin(uTime * 8.3) + 0.1 * sin(uTime * 13.7 + 1.0) + 0.07 * sin(uTime * 21.0 + 2.0)) * (1.0 + 0.35 * uFlare);
+      if (kind < 0.5 || kind > 4.5) {
+        float lit = clamp(aWatchA.w * intensity, 0.0, 1.0);
+        float da = abs(aWatchB.w);
+        float al = da * (0.26 + 0.74 * lit) * (aWatchB.w < 0.0 ? 0.55 : 1.0) + (tn > 0.9 ? 0.12 * da : 0.0);
+        if (kind < 0.5) al *= 0.6;
+        watch.rgb = mix(watch.rgb, uFlameColor, smoothstep(0.5, 1.0, lit));
+        if (kind > 7.5) {
+          watch.rgb = uFlameColor;
+          al = clamp(0.7 + 0.3 * sin(sd * 40.0 + uTime * 5.0), 0.0, 1.0);
+        }
+        watch.a = clamp(al, 0.07, 1.0);
+      } else {
+        vec3 rest = aWatchB.xyz;
+        vec3 q = rest;
+        float size = 1.05;
+        if (kind < 1.5) {
+          float ph = fract(uTime * (0.45 + 0.25 * fract(sd * 5.3)) + sd);
+          float hm = (0.35 + 0.75 * (1.0 - clamp(length(rest.xz) / 0.21, 0.0, 1.0))) * (0.7 + 0.3 * fract(sd * 11.0)) * (1.0 + 0.6 * uFlare);
+          q.y = 0.12 + ph * hm;
+          q.xz *= 1.0 - ph * 0.9;
+          q.x += 0.06 * ph * sin(uTime * 5.0 + sd * 50.0 + ph * 7.0) + 0.03 * ph * ph * sin(uTime * 2.3 + sd * 9.0);
+          q.z += 0.06 * ph * cos(uTime * 4.3 + sd * 37.0 + ph * 6.0) + 0.025 * ph * ph * cos(uTime * 1.9 + sd * 13.0);
+          watch = vec4(mix(vec3(0.96, 0.92, 0.86), uFlameColor, clamp(ph * 1.5, 0.0, 1.0)), (1.0 - ph) * 0.95);
+          size = 1.75 * (1.0 - ph * 0.45);
+        } else if (kind < 2.5) {
+          float ph = fract(uTime * 0.1 + sd);
+          q.y = 0.2 + ph * (2.2 + 1.1 * uFlare);
+          q.x += 0.5 * sin(uTime * 0.8 + sd * 30.0) * ph + 0.2 * ph * ph;
+          q.z += 0.4 * cos(uTime * 0.6 + sd * 20.0) * ph;
+          watch = vec4(uFlameColor, (1.0 - ph) * (0.45 + 0.55 * sin(uTime * 13.0 + sd * 80.0)));
+          size = 1.2;
+        } else if (kind < 3.5) {
+          float ph = fract(uTime * 0.06 + sd);
+          q.y = 0.7 + ph * 1.7;
+          q.xz *= 1.0 + ph * 3.0;
+          q.x += 0.3 * sin(uTime * 0.3 + sd * 10.0) * ph;
+          q.z += 0.2 * ph;
+          watch.a = 0.1 * sin(ph * 3.14159);
+          size = 1.1;
+        } else {
+          q += 0.12 * vec3(sin(uTime * 0.2 + sd * 40.0), sin(uTime * 0.17 + sd * 20.0), cos(uTime * 0.15 + sd * 30.0));
+          float dd = length(q - vec3(0.0, 0.32, 0.0));
+          float warmth = 1.0 / (1.0 + 9.0 * dd * dd);
+          watch = vec4(mix(watch.rgb, uFlameColor, warmth), 0.14 + 0.45 * warmth);
+          size = 0.9;
+        }
+        vec3 moved = watchView(q);
+        vec3 still = watchView(rest);
+        p.xy += (moved.xy - still.xy) * uIdle;
+        watchSize = size / 1.05 * still.z / moved.z;
+      }
+    }
     if (abs(uDirection) > 0.5) {
       float sweep = sin(3.14159265359 * m);
       float phase = aSeed * 6.28318530718;
@@ -60,11 +151,13 @@ const vertexShader = /* glsl */ `
     vec2 depthWeights = mix(aSourceDepth, aTargetDepth, m);
     float depth = 0.35 + 0.65 * smoothstep(-0.35, 0.85, p.z);
     float projectDepth = 0.20 + 0.80 * smoothstep(-0.52, 0.52, p.z);
-    vOpacity = style.x * (1.0 + (depth - 1.0) * depthWeights.x + (projectDepth - 1.0) * depthWeights.y);
+    vOpacity = mix(style.x * (1.0 + (depth - 1.0) * depthWeights.x + (projectDepth - 1.0) * depthWeights.y), watch.a, uIdle);
     vAccent = style.y;
     vProject = depthWeights.y;
+    // Reference colors are sRGB; the output stage expects linear.
+    vWatch = vec4(pow(watch.rgb, vec3(2.2)), uIdle);
     gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
-    gl_PointSize = mix(aSourceSize, aTargetSize, m) * uPointSize * mix(1.0, 1.2, vAccent);
+    gl_PointSize = mix(aSourceSize, aTargetSize, m) * uPointSize * mix(1.0, 1.2, vAccent) * mix(1.0, watchSize, uIdle);
   }
 `
 
@@ -74,20 +167,24 @@ const fragmentShader = /* glsl */ `
   varying float vOpacity;
   varying float vAccent;
   varying float vProject;
+  varying vec4 vWatch;
 
   void main() {
     float radius = length(gl_PointCoord - vec2(0.5));
     if (radius > 0.5) discard;
-    float coverage = 1.0 - smoothstep(mix(0.25, 0.40, vProject), 0.5, radius);
-    gl_FragColor = vec4(mix(uBaseColor, uAccentColor, vAccent), coverage * vOpacity);
+    // Skills draws solid dots like its reference; other states keep soft edges.
+    float coverage = mix(1.0 - smoothstep(mix(0.25, 0.40, vProject), 0.5, radius), 1.0, vWatch.a);
+    gl_FragColor = vec4(mix(mix(uBaseColor, uAccentColor, vAccent), vWatch.rgb, vWatch.a), coverage * vOpacity);
     #include <colorspace_fragment>
   }
 `
 
-export function createParticleRenderer({ canvas, skyCanvas, journeyView, container, section, motionPaused, reducedMotion, onUnavailable, onMorphFrame }) {
+export function createParticleRenderer({ canvas, skyCanvas, journeyView, container, section, motionPaused, reducedMotion, flame = DEFAULT_FLAME, onUnavailable, onMorphFrame }) {
   const mobile = window.matchMedia('(max-width: 760px)').matches
   const count = mobile ? MOBILE_PARTICLES : MAX_PARTICLES
   const targets = createShapeTargets(count)
+  let placement = watchLayout({ width: window.innerWidth, height: window.innerHeight, side: container.getBoundingClientRect().width || window.innerWidth })
+  placeWatch(placement, targets.skills.positions)
   const sky = createJourneySky(skyCanvas, { stars: STARS, cons: CONS, milestones: journeyConstellations, count })
   sky.setView(journeyView, true)
   sky.project(targets.journey.positions, targets.journey.style)
@@ -99,6 +196,7 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
   const sourceSize = new Float32Array(count).fill(1)
   const targetSize = new Float32Array(count).fill(1)
   if (visualState(section) === 'journey') { sky.project(target, targetStyle, targetSize); sourceSize.set(targetSize) }
+  if (initialState === 'skills') { targetSize.set(targets.skills.sizes); sourceSize.set(targetSize) }
   const sourceDepth = new Float32Array(count * 2)
   const targetDepth = new Float32Array(count * 2)
   const delays = targets.projects.delays
@@ -131,6 +229,8 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
   geometry.setAttribute('aTargetDepth', new BufferAttribute(targetDepth, 2).setUsage(DynamicDrawUsage))
   geometry.setAttribute('aDelay', new BufferAttribute(delays, 1))
   geometry.setAttribute('aSeed', new BufferAttribute(seeds, 1))
+  geometry.setAttribute('aWatchA', new BufferAttribute(targets.skills.watchA, 4))
+  geometry.setAttribute('aWatchB', new BufferAttribute(targets.skills.watchB, 4))
 
   const material = new ShaderMaterial({
     vertexShader,
@@ -147,6 +247,16 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
       uPointSize: { value: 2 },
       uBaseColor: { value: new Color('#ece1d3') },
       uAccentColor: { value: new Color('#dc8079') },
+      // sRGB like the reference; the shader converts after mixing.
+      uFlameColor: { value: new Vector3(...flame) },
+      uWatchTarget: { value: new Vector3(...WATCH_CAMERA.target) },
+      uWatchCamera: { value: new Vector4(...WATCH_CAMERA.rotation) },
+      uWatchLayout: { value: new Vector3(placement.x, placement.y, placement.scale) },
+      uSourceLift: { value: 0 },
+      uTargetLift: { value: 0 },
+      uIdle: { value: initialState === 'skills' ? 1 : 0 },
+      uTime: { value: 0 },
+      uFlare: { value: 0 },
     },
   })
 
@@ -187,6 +297,15 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
   let placementProgressBase = 0
   let projectIdleElapsed = 0
   let renderSize = 1
+  let previousState = initialState
+  let skillsWeight = initialState === 'skills' ? 1 : 0
+  let sourceSkills = skillsWeight
+  let targetSkills = skillsWeight
+  let descentSign = 0
+  const flameColor = flame.slice()
+  let flameTarget = flame.slice()
+  let burst = 0
+  sky.setDescent(initialState === 'skills' ? 1 : 0)
 
   function updateSkyTarget() {
     if (currentState !== 'journey') return
@@ -205,7 +324,55 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
 
   function canAnimate() {
     return !disposed && !document.hidden && (inViewport || transitioning) && !paused &&
-      (transitioning || !reduced && (currentState === 'home' || currentState === 'projects' || currentState === 'journey' && sky.moving))
+      (transitioning || !reduced && (currentState === 'home' || currentState === 'projects' || currentState === 'skills' || currentState === 'journey' && sky.moving))
+  }
+
+  // The sky stays up between Journey and Skills; arriving from elsewhere it fades in late in the morph.
+  function skyOpacity() {
+    if (!SKY_STATES.includes(currentState)) return 0
+    if (!transitioning || SKY_STATES.includes(previousState)) return 1
+    return smoothProgress((material.uniforms.uMorph.value - .45) / .55)
+  }
+
+  function updateDescent(raw) {
+    if (!descentSign) return
+    const eased = smoothProgress(raw)
+    material.uniforms.uSourceLift.value = descentSign * placement.lift * eased
+    material.uniforms.uTargetLift.value = -descentSign * placement.lift * (1 - eased)
+    sky.setDescent(descentSign > 0 ? eased : 1 - eased)
+  }
+
+  // Flame tint eases toward the selected category; a selection stokes the fire.
+  function updateFlame(seconds) {
+    const blend = seconds === null ? 1 : Math.min(1, seconds * 3)
+    for (let i = 0; i < 3; i++) flameColor[i] += (flameTarget[i] - flameColor[i]) * blend
+    material.uniforms.uFlameColor.value.set(...flameColor)
+    if (seconds !== null) burst *= Math.pow(0.18, seconds)
+    material.uniforms.uFlare.value = watchFlare(material.uniforms.uTime.value, burst)
+  }
+
+  function setFlame(color, flare = false) {
+    if (disposed) return
+    flameTarget = color.slice()
+    const still = paused || reduced || !canAnimate()
+    if (flare && !still) burst = 1
+    if (still) {
+      updateFlame(null)
+      draw()
+    }
+    resetAnimationClock()
+  }
+
+  function placeSkills() {
+    const side = container.getBoundingClientRect().width
+    if (!side) return
+    placement = watchLayout({ width: window.innerWidth, height: window.innerHeight, side })
+    placeWatch(placement, targets.skills.positions)
+    material.uniforms.uWatchLayout.value.set(placement.x, placement.y, placement.scale)
+    sky.setHorizon(placement.horizon)
+    if (currentState !== 'skills') return
+    target.set(targets.skills.positions)
+    geometry.attributes.aTarget.needsUpdate = true
   }
 
   function positionProject() {
@@ -216,7 +383,7 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
   }
 
   function draw() {
-    sky.present(currentState === 'journey' ? (transitioning ? smoothProgress((material.uniforms.uMorph.value - .45) / .55) : 1) : 0)
+    sky.present(skyOpacity())
     if (!disposed && !document.hidden && inViewport) renderer.render(scene, camera)
   }
 
@@ -224,6 +391,12 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
     material.uniforms.uMorph.value = 1
     material.uniforms.uRotation.value = targetRotation
     projectWeight = targetProject
+    skillsWeight = targetSkills
+    material.uniforms.uIdle.value = skillsWeight
+    if (descentSign) updateDescent(1)
+    descentSign = 0
+    material.uniforms.uSourceLift.value = 0
+    material.uniforms.uTargetLift.value = 0
     direction = 0
     material.uniforms.uDirection.value = 0
     placementPointScale = onMorphFrame?.(1) ?? 1
@@ -247,6 +420,8 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
     const delta = Math.min(difference, 100)
     if (currentState === 'journey' && sky.moving) { sky.update(delta / 1000); updateSkyTarget() }
     if (!reduced && (projectWeight || targetProject)) projectPhase += delta / 1000
+    if (!reduced && (skillsWeight || targetSkills)) material.uniforms.uTime.value += delta / 1000
+    updateFlame(delta / 1000)
     if (transitioning) {
       elapsed += delta
       const raw = Math.min(1, elapsed / transitionDuration)
@@ -257,6 +432,9 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
       material.uniforms.uRotation.value = sourceRotation + (targetRotation - sourceRotation) * rotationProgress + momentum
       const idleProgress = direction > 0 ? smoothProgress((raw - 0.66) / 0.34) : direction < 0 ? smoothProgress(raw / 0.34) : progress
       projectWeight = sourceProject + (targetProject - sourceProject) * idleProgress
+      skillsWeight = sourceSkills + (targetSkills - sourceSkills) * idleProgress
+      material.uniforms.uIdle.value = skillsWeight
+      updateDescent(raw)
       placementPointScale = onMorphFrame?.(placementProgressBase + (1 - placementProgressBase) * raw) ?? 1
       if (elapsed >= transitionDuration) finishTransition()
     } else if (currentState === 'home') {
@@ -318,6 +496,7 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
     positionProject()
     geometry.setDrawRange(0, Math.min(performanceDrawLimit, narrow ? MOBILE_PARTICLES : count))
     duration = narrow ? 450 : 1000
+    placeSkills()
     draw()
   }
 
@@ -331,10 +510,17 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
     sampleMorphValues(sourceDepth, targetDepth, uniforms.uMorph.value, delays, direction, 2, sourceDepth)
     sampleMorphValues(sourceSize, targetSize, uniforms.uMorph.value, delays, direction, 1, sourceSize)
     globePair = (currentState === 'home' && nextState === 'projects') || (currentState === 'projects' && nextState === 'home')
-    const skyPair = currentState === 'journey' || nextState === 'journey'
-    direction = !reduced && (globePair || skyPair) ? nextState === 'journey' || nextState === 'projects' ? 1 : -1 : 0
+    const skyPair = SKY_STATES.includes(currentState) || SKY_STATES.includes(nextState)
+    direction = !reduced && (globePair || skyPair) ? ['journey', 'skills', 'projects'].includes(nextState) ? 1 : -1 : 0
+    // Journey → Skills tilts the view down to the horizon; Skills → Journey looks back up.
+    descentSign = reduced ? 0 : currentState === 'journey' && nextState === 'skills' ? 1 : currentState === 'skills' && nextState === 'journey' ? -1 : 0
+    if (!descentSign && SKY_STATES.includes(nextState)) sky.setDescent(nextState === 'skills' ? 1 : 0)
+    material.uniforms.uSourceLift.value = 0
+    material.uniforms.uTargetLift.value = 0
+    if (nextState === 'skills') placeSkills()
     if (nextState === 'journey') { sky.resize(); sky.project(targets.journey.positions, targets.journey.style) }
     targetSize.fill(1)
+    if (nextState === 'skills') targetSize.set(targets.skills.sizes)
     if (nextState === 'journey') sky.project(targets.journey.positions, targets.journey.style, targetSize)
     target.set(targets[nextState].positions)
     targetStyle.set(targets[nextState].style)
@@ -345,6 +531,8 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
     for (const name of ['aSourceSize', 'aTargetSize', 'position', 'aTarget', 'aSourceStyle', 'aTargetStyle', 'aSourceDepth', 'aTargetDepth']) geometry.attributes[name].needsUpdate = true
     sourceProject = projectWeight
     targetProject = nextState === 'projects' ? 1 : 0
+    sourceSkills = skillsWeight
+    targetSkills = nextState === 'skills' ? 1 : 0
     sourceRotation = Math.atan2(Math.sin(uniforms.uRotation.value), Math.cos(uniforms.uRotation.value))
     uniforms.uRotation.value = sourceRotation
     if (currentState === 'home' && !transitioning) lastGlobeRotation = sourceRotation
@@ -352,6 +540,7 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
     targetRotation = sourceRotation + Math.atan2(Math.sin(destinationRotation - sourceRotation), Math.cos(destinationRotation - sourceRotation))
     uniforms.uDirection.value = direction
     uniforms.uMorph.value = 0
+    previousState = currentState
     currentState = nextState
     elapsed = 0
     placementProgressBase = 0
@@ -441,5 +630,5 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
   resize()
   schedule()
 
-  return { setJourneyView, setSection, setMotionPreferences, destroy, getRenderSize: () => renderSize }
+  return { setJourneyView, setSection, setMotionPreferences, setFlame, destroy, getRenderSize: () => renderSize }
 }

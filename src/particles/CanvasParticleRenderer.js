@@ -8,15 +8,25 @@ import {
   visualState,
 } from './shapeTargets.js'
 import { particleProgress, sampleMorph, sampleMorphValues } from './aerostaticTransition.js'
+import { placeWatch, watchFlare, watchLayout, watchShade } from './watchTarget.js'
+
+// Journey and Skills share the full-screen sky region and its slow transitions.
+const SKY_STATES = ['journey', 'skills']
+const DEFAULT_FLAME = [1, 0.7, 0.42]
 
 // This renderer has no GPU dependency. The same points and interruption model
 // remain animated when WebGL is unavailable, including ordinary Chrome software rendering.
-export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, container, section, motionPaused, reducedMotion, lowPower = false, onMorphFrame }) {
+export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, container, section, motionPaused, reducedMotion, flame = DEFAULT_FLAME, lowPower = false, onMorphFrame }) {
   const context = canvas.getContext('2d', { alpha: true })
   if (!context) throw new Error('Canvas drawing is unavailable.')
   const mobile = window.matchMedia('(max-width: 760px)').matches
   const count = lowPower ? 900 : mobile ? 1200 : 1800
   const targets = createShapeTargets(count)
+  let placement = watchLayout({ width: window.innerWidth, height: window.innerHeight, side: container.getBoundingClientRect().width || window.innerWidth })
+  placeWatch(placement, targets.skills.positions)
+  const { watchA, watchB } = targets.skills
+  const shade = [0, 0, 1, 1, 0]
+  let flare = 0
   const sky = createJourneySky(skyCanvas, { stars: STARS, cons: CONS, milestones: journeyConstellations, count })
   sky.setView(journeyView, true)
   sky.project(targets.journey.positions, targets.journey.style)
@@ -28,6 +38,7 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
   const sourceSize = new Float32Array(count).fill(1)
   const targetSize = new Float32Array(count).fill(1)
   if (visualState(section) === 'journey') { sky.project(target, targetStyle, targetSize); sourceSize.set(targetSize) }
+  if (currentState === 'skills') { targetSize.set(targets.skills.sizes); sourceSize.set(targetSize) }
   const sourceDepth = new Float32Array(count * 2)
   const targetDepth = new Float32Array(count * 2)
   const delays = targets.projects.delays
@@ -36,11 +47,23 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
     sourceDepth[i * 2 + 1] = currentState === 'projects' ? 1 : 0
   }
   targetDepth.set(sourceDepth)
-  const buckets = Array.from({ length: 20 }, () => [])
+  // Ten opacity buckets each for base, accent and the (tintable) Skills flame.
+  const buckets = Array.from({ length: 30 }, () => [])
   const colors = buckets.map((_, index) => {
     const opacity = (index % 10 + 1) / 10
     return index >= 10 ? `rgba(220,128,121,${opacity})` : `rgba(236,225,211,${opacity})`
   })
+  const flameColor = flame.slice()
+  let flameTarget = flame.slice()
+  let burst = 0
+  function tintFlame(seconds) {
+    const blend = seconds === null ? 1 : Math.min(1, seconds * 3)
+    for (let i = 0; i < 3; i++) flameColor[i] += (flameTarget[i] - flameColor[i]) * blend
+    const [r, g, b] = flameColor.map((channel) => Math.round(channel * 255))
+    for (let i = 20; i < 30; i++) colors[i] = `rgba(${r},${g},${b},${(i % 10 + 1) / 10})`
+    if (seconds !== null) burst *= Math.pow(0.18, seconds)
+  }
+  tintFlame(null)
   let paused = motionPaused
   let reduced = reducedMotion
   let disposed = false
@@ -76,6 +99,50 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
   let drawCount = count
   let frameInterval = 1000 / 30
   let slowFrames = 0
+  let previousState = currentState
+  let skillsWeight = currentState === 'skills' ? 1 : 0
+  let sourceSkills = skillsWeight
+  let targetSkills = skillsWeight
+  let skillsTime = 0
+  let descentSign = 0
+  let sourceLift = 0
+  let targetLift = 0
+  sky.setDescent(currentState === 'skills' ? 1 : 0)
+
+  // The sky stays up between Journey and Skills; arriving from elsewhere it fades in late in the morph.
+  function skyOpacity() {
+    if (!SKY_STATES.includes(currentState)) return 0
+    if (!transitioning || SKY_STATES.includes(previousState)) return 1
+    return smoothProgress((morph - .45) / .55)
+  }
+
+  function updateDescent(progress) {
+    if (!descentSign) return
+    const eased = smoothProgress(progress)
+    sourceLift = descentSign * placement.lift * eased
+    targetLift = -descentSign * placement.lift * (1 - eased)
+    sky.setDescent(descentSign > 0 ? eased : 1 - eased)
+  }
+
+  function placeSkills() {
+    if (!width) return
+    placement = watchLayout({ width: window.innerWidth, height: window.innerHeight, side: width })
+    placeWatch(placement, targets.skills.positions)
+    sky.setHorizon(placement.horizon)
+    if (currentState === 'skills') target.set(targets.skills.positions)
+  }
+
+  function setFlame(color, flare = false) {
+    if (disposed) return
+    flameTarget = color.slice()
+    const still = paused || reduced || !canAnimate()
+    if (flare && !still) burst = 1
+    if (still) {
+      tintFlame(null)
+      draw()
+    }
+    resetAnimationClock()
+  }
 
   function updateSkyTarget() {
     if (currentState !== 'journey') return
@@ -91,11 +158,11 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
 
   function canAnimate() {
     return !disposed && !document.hidden && (inViewport || transitioning) && !paused &&
-      (transitioning || (!reduced && (currentState === 'home' || currentState === 'projects' || currentState === 'journey' && sky.moving)))
+      (transitioning || (!reduced && (currentState === 'home' || currentState === 'projects' || currentState === 'skills' || currentState === 'journey' && sky.moving)))
   }
 
   function draw() {
-    sky.present(currentState === 'journey' ? (transitioning ? smoothProgress((morph - .45) / .55) : 1) : 0)
+    sky.present(skyOpacity())
     if (disposed || document.hidden || !inViewport) return
     context.clearRect(0, 0, width, height)
     for (const bucket of buckets) bucket.length = 0
@@ -114,8 +181,19 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
       const s = i * 2
       const movement = particleProgress(morph, delays?.[i] ?? 0, transitionDirection)
       let x = source[p] + (target[p] - source[p]) * movement
-      let y = source[p + 1] + (target[p + 1] - source[p + 1]) * movement
+      let y = source[p + 1] + sourceLift + (target[p + 1] + targetLift - source[p + 1] - sourceLift) * movement
       let z = source[p + 2] + (target[p + 2] - source[p + 2]) * movement
+      let watchAlpha = 0
+      let watchSize = 1
+      let watchFlame = false
+      if (skillsWeight) {
+        watchShade(watchA, watchB, i, skillsTime, flare, shade)
+        x += shade[0] * placement.scale * skillsWeight
+        y += shade[1] * placement.scale * skillsWeight
+        watchAlpha = shade[2]
+        watchSize = 1 + (shade[3] - 1) * skillsWeight
+        watchFlame = skillsWeight > 0.5 && shade[4] > 0.5
+      }
       if (transitionDirection) {
         const seed = (i * 0.61803398875) % 1
         const sweep = Math.sin(Math.PI * movement)
@@ -133,12 +211,13 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
       const projectDepth = 0.20 + 0.80 * smoothProgress((rotatedZ + 0.52) / 1.04)
       const depthGlobeWeight = sourceDepth[s] + (targetDepth[s] - sourceDepth[s]) * movement
       const depthProjectWeight = sourceDepth[s + 1] + (targetDepth[s + 1] - sourceDepth[s + 1]) * movement
-      const opacity = brightness * (1 + (globeDepth - 1) * depthGlobeWeight + (projectDepth - 1) * depthProjectWeight)
+      const shaded = brightness * (1 + (globeDepth - 1) * depthGlobeWeight + (projectDepth - 1) * depthProjectWeight)
+      const opacity = shaded + (watchAlpha - shaded) * skillsWeight
       if (opacity < 0.025) continue
-      const bucket = buckets[(accent > 0.35 ? 10 : 0) + Math.min(9, Math.max(0, Math.round(opacity * 10) - 1))]
+      const bucket = buckets[(watchFlame ? 20 : accent > 0.35 ? 10 : 0) + Math.min(9, Math.max(0, Math.round(opacity * 10) - 1))]
       bucket.push(width / 2 + (rotatedX * swayCosine - rotatedY * swaySine) * scale,
         height / 2 - (rotatedX * swaySine + rotatedY * swayCosine + float) * scale,
-        radius * (sourceSize[i] + (targetSize[i] - sourceSize[i]) * movement) * (1 + accent * 0.2))
+        radius * (sourceSize[i] + (targetSize[i] - sourceSize[i]) * movement) * (1 + accent * 0.2) * watchSize)
     }
     // At most twenty fills per frame rather than changing style/filling per dot.
     for (let i = 0; i < buckets.length; i++) {
@@ -162,6 +241,10 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
     rotation = targetRotation
     globeWeight = targetGlobe
     projectWeight = targetProject
+    skillsWeight = targetSkills
+    if (descentSign) updateDescent(1)
+    descentSign = 0
+    sourceLift = targetLift = 0
     transitioning = false
     transitionDirection = 0
     placementPointScale = onMorphFrame?.(1) ?? 1
@@ -183,6 +266,9 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
     const delta = Math.min(difference, 100)
     if (currentState === 'journey' && sky.moving) { sky.update(delta / 1000); updateSkyTarget() }
     if (!reduced && (projectWeight || targetProject)) projectPhase += delta / 1000
+    if (!reduced && (skillsWeight || targetSkills)) skillsTime += delta / 1000
+    tintFlame(delta / 1000)
+    flare = watchFlare(skillsTime, burst)
     if (transitioning) {
       elapsed += delta
       const progress = Math.min(1, elapsed / transitionDuration)
@@ -195,6 +281,8 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
       const idleProgress = transitionDirection === 1 ? smoothProgress((progress - 0.66) / 0.34)
         : transitionDirection === -1 ? smoothProgress(progress / 0.34) : eased
       projectWeight = sourceProject + (targetProject - sourceProject) * idleProgress
+      skillsWeight = sourceSkills + (targetSkills - sourceSkills) * idleProgress
+      updateDescent(progress)
       placementPointScale = onMorphFrame?.(placementProgressBase + (1 - placementProgressBase) * progress) ?? 1
       if (elapsed >= transitionDuration) finishTransition()
     } else if (currentState === 'home') {
@@ -239,6 +327,7 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
     pointRadius = narrow ? 0.95 : 1.075
     duration = narrow ? 450 : 1000
     drawCount = Math.min(drawCount, narrow ? 1200 : count)
+    placeSkills()
     draw()
   }
 
@@ -250,8 +339,10 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
     sampleMorphValues(sourceStyle, targetStyle, morph, delays, transitionDirection, 2, sourceStyle)
     sampleMorphValues(sourceDepth, targetDepth, morph, delays, transitionDirection, 2, sourceDepth)
     if (nextState === 'journey') { sky.resize(); sky.project(targets.journey.positions, targets.journey.style) }
+    if (nextState === 'skills') placeSkills()
     sampleMorphValues(sourceSize, targetSize, morph, delays, transitionDirection, 1, sourceSize)
     targetSize.fill(1)
+    if (nextState === 'skills') targetSize.set(targets.skills.sizes)
     if (nextState === 'journey') sky.project(targets.journey.positions, targets.journey.style, targetSize)
     target.set(targets[nextState].positions)
     targetStyle.set(targets[nextState].style)
@@ -263,6 +354,8 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
     targetGlobe = nextState === 'home' ? 1 : 0
     sourceProject = projectWeight
     targetProject = nextState === 'projects' ? 1 : 0
+    sourceSkills = skillsWeight
+    targetSkills = nextState === 'skills' ? 1 : 0
     sourceRotation = Math.atan2(Math.sin(rotation + idleYaw), Math.cos(rotation + idleYaw))
     rotation = sourceRotation
     idleYaw = 0
@@ -271,8 +364,13 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
     const destinationRotation = nextState === 'home' ? lastGlobeRotation : nextState === 'projects' ? 0.35 : 0
     targetRotation = sourceRotation + Math.atan2(Math.sin(destinationRotation - sourceRotation), Math.cos(destinationRotation - sourceRotation))
     globeProjectTransition = (currentState === 'home' && nextState === 'projects') || (currentState === 'projects' && nextState === 'home')
-    const skyPair = currentState === 'journey' || nextState === 'journey'
-    transitionDirection = (globeProjectTransition || skyPair) && !reduced ? nextState === 'journey' || nextState === 'projects' ? 1 : -1 : 0
+    const skyPair = SKY_STATES.includes(currentState) || SKY_STATES.includes(nextState)
+    transitionDirection = (globeProjectTransition || skyPair) && !reduced ? ['journey', 'skills', 'projects'].includes(nextState) ? 1 : -1 : 0
+    // Journey → Skills tilts the view down to the horizon; Skills → Journey looks back up.
+    descentSign = reduced ? 0 : currentState === 'journey' && nextState === 'skills' ? 1 : currentState === 'skills' && nextState === 'journey' ? -1 : 0
+    if (!descentSign && SKY_STATES.includes(nextState)) sky.setDescent(nextState === 'skills' ? 1 : 0)
+    sourceLift = targetLift = 0
+    previousState = currentState
     currentState = nextState
     morph = 0
     elapsed = 0
@@ -341,5 +439,5 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
   document.addEventListener('visibilitychange', visibilityChanged)
   resize()
   schedule()
-  return { setJourneyView, setSection, setMotionPreferences, destroy, getRenderSize: () => width }
+  return { setJourneyView, setSection, setMotionPreferences, setFlame, destroy, getRenderSize: () => width }
 }

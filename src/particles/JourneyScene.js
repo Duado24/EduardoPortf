@@ -27,8 +27,12 @@ const toVec = (P) => P.map((p) => gal2eq(LL0 - p[0], p[1]));
 export function createJourneySky(cv, opts = {}) {
   const milestones = opts.milestones || [], STARS = opts.stars, CONS = opts.cons;
   const reduced = false;
-  const ctx = cv.getContext('2d', { alpha: true });
-  if (!ctx) throw new Error('Sky canvas unavailable');
+  const baseCtx = cv.getContext('2d', { alpha: true });
+  if (!baseCtx) throw new Error('Sky canvas unavailable');
+  // Overlays (routes, constellations, labels) draw here; during the Skills descent they
+  // go through an offscreen layer so they can fade as one.
+  let ctx = baseCtx;
+  let overlay = null;
   let lang = opts.lang || 'en';
 
   // ---- stars ----
@@ -79,6 +83,8 @@ export function createJourneySky(cv, opts = {}) {
   const cam = { c: [1, 0, 0], fov: 40 };
   let from = { c: [1, 0, 0], fov: 40 }, to = { c: [1, 0, 0], fov: 40 }, tT = 1, dur = 2.4, pulse = 30, idx = opts.start || 0, hiFrom = idx, hiTo = idx;
   let manualReveal = false, reveal = 0, paused = true, T = 0;
+  // Skills looks down from this sky: 0 is Journey's view, 1 has tilted to the horizon.
+  let descent = 0, horizon = 0;
   function viewFor(i) {
     const m = ms[i];
     if (manualReveal && i === 0) return { c: norm(gal2eq(318, 2)), fov: 78 };
@@ -128,7 +134,7 @@ export function createJourneySky(cv, opts = {}) {
 
     C0 = cam.c; E0 = norm(cross([0, 0, 1], C0)); if (Math.hypot(E0[0], E0[1], E0[2]) < 0.5) E0 = [1, 0, 0]; N0 = cross(C0, E0);
     S = (H / 2) / (2 * Math.tan(cam.fov * D2R / 4));
-    const wob = paused || reduced ? 0 : 1; SX = cx + Math.sin(T * 0.2) * 5 * dpr * wob; SY = cy + Math.cos(T * 0.17) * 3.5 * dpr * wob;
+    const wob = paused || reduced ? 0 : 1; SX = cx + Math.sin(T * 0.2) * 5 * dpr * wob; SY = cy + Math.cos(T * 0.17) * 3.5 * dpr * wob - descent * 0.42 * H;
     const zf = clamp(Math.sqrt(44 / cam.fov), 0.8, 1.55);
 
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, side, side);
@@ -154,6 +160,36 @@ export function createJourneySky(cv, opts = {}) {
     ctx.fillStyle = 'rgba(255,226,214,.08)'; ctx.fill(halo);
     for (let c = 0; c < 3; c++) for (let k = 0; k < 5; k++) { const rgb = STAR_RGB[c]; ctx.fillStyle = 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + (0.25 + 0.17 * k).toFixed(2) + ')'; ctx.fill(sp[c][k]); }
 
+    const overlayAlpha = 1 - descent;
+    if (overlayAlpha > 0.01) {
+      const layered = overlayAlpha < 0.99;
+      if (layered) {
+        overlay ??= document.createElement('canvas');
+        if (overlay.width !== cv.width || overlay.height !== cv.height) { overlay.width = cv.width; overlay.height = cv.height; }
+        ctx = overlay.getContext('2d');
+        ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, overlay.width, overlay.height);
+        ctx.translate((side - W) / 2, (side - H) / 2);
+      }
+      drawOverlays(eNow, zf);
+      if (layered) {
+        ctx = baseCtx;
+        ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = overlayAlpha; ctx.drawImage(overlay, 0, 0); ctx.restore();
+      }
+    }
+
+    // Below the horizon the ground takes over; the edge rises with the descent.
+    if (descent > 0.001) {
+      const ground = H + 60 * dpr + (H / 2 + horizon * dpr - H - 60 * dpr) * descent, fade = 90 * dpr;
+      const gradient = ctx.createLinearGradient(0, ground - fade, 0, ground);
+      gradient.addColorStop(0, 'rgba(0,0,0,0)'); gradient.addColorStop(1, 'rgba(0,0,0,1)');
+      ctx.save(); ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = gradient; ctx.fillRect(-W, ground - fade, W * 3, fade);
+      ctx.fillStyle = '#000'; ctx.fillRect(-W, ground, W * 3, side);
+      ctx.restore();
+    }
+  }
+
+  function drawOverlays(eNow, zf) {
     // route arcs between your constellations (accent dots): traveled = brighter
     ctx.lineCap = 'round';
     arcs.forEach((pts, i) => {
@@ -231,6 +267,10 @@ export function createJourneySky(cv, opts = {}) {
       }
     },
     present(opacity) { cv.style.opacity = String(opacity); },
+    /** 0 = Journey's view; 1 = tilted down to the Skills horizon (overlays faded). */
+    setDescent(value) { const next = clamp(value, 0, 1); if (next !== descent) { descent = next; render(0); } },
+    /** Horizon line for the descent, in CSS px below the sky band's center. */
+    setHorizon(px) { if (px !== horizon) { horizon = px; if (descent > 0) render(0); } },
     destroy() { ctx.clearRect(0, 0, cv.width, cv.height); },
   };
 }

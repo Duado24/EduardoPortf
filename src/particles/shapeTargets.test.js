@@ -69,7 +69,7 @@ test('all six states have deterministic finite targets at desktop and fallback c
     assert.equal(desktop[state].style.length, 5600 * 2)
     if (state !== 'projects') assert.deepEqual(desktop[state].positions.slice(0, 900 * 3), fallback[state].positions)
     assert.ok(desktop[state].positions.every(Number.isFinite))
-    assert.ok(desktop[state].positions.every((value) => Math.abs(value) <= (state === 'journey' ? 4 : 1.1)))
+    assert.ok(desktop[state].positions.every((value) => Math.abs(value) <= (state === 'journey' || state === 'skills' ? 4 : 1.1)))
     assert.ok(desktop[state].style.every((value) => value >= 0 && value <= 1))
   }
   assert.equal(visualState('unknown'), 'home')

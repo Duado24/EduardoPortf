@@ -9,10 +9,6 @@ function polyline(points, width = 0.075, accent = 0) {
   return points.slice(1).map((end, index) => line(points[index], end, width, accent))
 }
 
-function circle(center, radius, width = 0.075, accent = 0) {
-  return { kind: 'circle', center, radius, length: Math.PI * 2 * radius, width, accent }
-}
-
 function roundedFrame(left, bottom, right, top, radius = 0.1, width = 0.075) {
   const points = []
   for (const [cx, cy, start] of [
@@ -45,23 +41,6 @@ const projectStrokes = [
   ...polyline([[-0.28, -0.59], [0, -0.47], [0.28, -0.59], [0.23, -0.9], [-0.23, -0.9], [-0.28, -0.59]], 0.055),
 ]
 
-const skillStrokes = [
-  ...roundedFrame(-0.5, -0.5, 0.5, 0.5, 0.075, 0.065),
-  ...polyline([[-0.23, 0.2], [0.23, 0.2], [0.23, -0.2], [-0.23, -0.2], [-0.23, 0.2]], 0.05),
-  line([-0.23, 0.2], [0.23, -0.2], 0.045),
-  ...[-0.23, 0.23].flatMap((x) => [-0.2, 0.2].map((y) => circle([x, y], 0.055, 0.04))),
-  ...[-0.32, -0.11, 0.11, 0.32].flatMap((coordinate) => [
-    line([-0.5, coordinate], [-0.82, coordinate], 0.055),
-    line([0.5, coordinate], [0.82, coordinate], 0.055),
-    line([coordinate, -0.5], [coordinate, -0.82], 0.055),
-    line([coordinate, 0.5], [coordinate, 0.82], 0.055),
-  ]),
-  ...[-1, 1].flatMap((x) => [-1, 1].flatMap((y) => [
-    line([x * 0.45, y * 0.45], [x * 0.82, y * 0.82], 0.055),
-    circle([x * 0.88, y * 0.88], 0.065, 0.045),
-  ])),
-]
-
 const contactStrokes = [
   ...roundedFrame(-0.97, -0.64, 0.97, 0.64, 0.09, 0.075),
   ...polyline([[-0.9, 0.58], [0, -0.04], [0.9, 0.58]], 0.075),
@@ -71,7 +50,6 @@ const contactStrokes = [
 
 const contours = {
   projects: projectStrokes,
-  skills: skillStrokes,
   contact: contactStrokes,
 }
 

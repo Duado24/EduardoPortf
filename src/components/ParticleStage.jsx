@@ -20,7 +20,9 @@ function clearPlacement(region) {
   }
 }
 
-export default function ParticleStage({ section, journeyView, visualSection = section, motionPaused = false, reducedMotion = false, onRendererChange, onTransitionProgress }) {
+const SKY_STATES = ['journey', 'skills']
+
+export default function ParticleStage({ section, journeyView, skillFlame, visualSection = section, motionPaused = false, reducedMotion = false, onRendererChange, onTransitionProgress }) {
   const containerRef = useRef(null)
   const placementRef = useRef(null)
   const lastBoxRef = useRef(null)
@@ -31,7 +33,7 @@ export default function ParticleStage({ section, journeyView, visualSection = se
   const rendererRef = useRef(null)
   const presentationCallbackRef = useRef(onTransitionProgress)
   const placementFrameRef = useRef({})
-  const propertiesRef = useRef({ section, journeyView, motionPaused, reducedMotion })
+  const propertiesRef = useRef({ section, journeyView, motionPaused, reducedMotion, flame: skillFlame?.color })
   const [status, setStatus] = useState({ mode: 'static', reason: 'loading' })
   const available = status.mode !== 'static'
 
@@ -78,7 +80,7 @@ export default function ParticleStage({ section, journeyView, visualSection = se
     const fromGlobe = previous === 'about' || previous === 'home'
     const toGlobe = visualSection === 'about' || visualSection === 'home'
     const pair = (fromGlobe && visualSection === 'projects') || (previous === 'projects' && toGlobe)
-    const skyPair = previous === 'journey' || visualSection === 'journey'
+    const skyPair = SKY_STATES.includes(previous) || SKY_STATES.includes(visualSection)
     if (!pair && !skyPair && !interrupted) return
     const from = { ...lastBoxRef.current }
     region.style.transition = 'none'
@@ -128,10 +130,14 @@ export default function ParticleStage({ section, journeyView, visualSection = se
   }, [status.mode, onRendererChange])
 
   useEffect(() => {
-    propertiesRef.current = { section, journeyView, motionPaused, reducedMotion }
-  }, [section, journeyView, motionPaused, reducedMotion])
+    propertiesRef.current = { section, journeyView, motionPaused, reducedMotion, flame: skillFlame?.color }
+  }, [section, journeyView, motionPaused, reducedMotion, skillFlame])
 
   useEffect(() => { rendererRef.current?.setJourneyView(journeyView) }, [journeyView])
+
+  useEffect(() => {
+    if (skillFlame) rendererRef.current?.setFlame?.(skillFlame.color, skillFlame.flare)
+  }, [skillFlame])
 
   useEffect(() => {
     rendererRef.current?.setMotionPreferences(motionPaused, reducedMotion)

@@ -2,7 +2,7 @@
 
 All six sections use one shared point interface: geographic globe on Home/About,
 volumetric aerostatic globe on Projects, a distributed southern sky on Journey,
-a connected chip on Skills, and an envelope on Contact. Journey's full sky,
+a knight keeping watch by a campfire on Skills, and an envelope on Contact. Journey's full sky,
 landscape, and selectable milestone anchors are SVG and semantic HTML over
 that same renderer; there is no second WebGL context or continuous scene loop.
 Its visual coordinates stay separate from the factual milestone data. Normal
@@ -111,3 +111,19 @@ The browser checks all routes, interruptions, resize/history, all six camera
 selections, keyboard/touch, names, reveal, pause/reduced motion, Canvas fallback,
 and complete canvas failure. Headless software WebGL checks do not replace
 physical mobile/GPU profiling.
+
+## Skills: The Last Watch
+
+`watch-samples.json` is baked from the approved
+`references/claude/the_last_watch_tweak_claude_5600 (1).html`: its own scene
+builder and 5,600-particle tuning run once in Node via
+`node scripts/generate-watch-targets.mjs`. Samples are ordered per kind by
+radical inverse, so the 1,800 / 1,400 / 900 budgets are prefixes that keep the
+knight, cloak, logs, embers, stones, flame, sparks, smoke and dust.
+
+`watchTarget.js` views the scene from one fixed camera, mirrored so the knight
+sits left of the fire, and places it per viewport inside the full-screen sky
+region Skills shares with Journey. Arriving from Journey, the sky tilts down to
+the horizon. Fire lighting, flame, sparks, smoke and dust animate in the vertex
+shader (and `watchShade()` for Canvas2D); the selected skill category tints the
+flame and its light, and stokes the fire.

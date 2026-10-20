@@ -162,25 +162,36 @@ export const journey = [
 
 export const journeyNodes = journey;
 
+// `flame` tints the Skills fire and its light on the knight (sRGB, 0–1) when the category is selected.
 export const skillGroups = [
   {
     name: 'Front-end development',
+    short: 'Front-end',
+    flame: [1, 0.7, 0.42],
     skills: ['React', 'JavaScript', 'HTML', 'CSS', 'Tailwind CSS', 'Responsive design'],
   },
   {
     name: 'Software & automation',
+    short: 'Software',
+    flame: [1, 0.48, 0.42],
     skills: ['Python', 'Google Apps Script', 'REST APIs', 'Canvas API', 'Automation tools'],
   },
   {
     name: 'UX & accessibility',
+    short: 'UX',
+    flame: [1, 0.84, 0.56],
     skills: ['Accessible web design', 'Semantic HTML', 'Responsive layouts', 'Usability review', 'Canvas LMS design'],
   },
   {
     name: 'Systems & cybersecurity',
+    short: 'Systems',
+    flame: [0.62, 0.74, 1],
     skills: ['Linux', 'Nginx', 'NFS', 'Networking', 'System administration', 'Security fundamentals'],
   },
   {
     name: 'Tools',
+    short: 'Tools',
+    flame: [0.92, 0.56, 0.78],
     skills: ['Git', 'GitHub', 'Vite', 'VS Code', 'Microsoft Office', 'Canvas LMS'],
   },
 ];

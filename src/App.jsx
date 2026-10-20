@@ -10,8 +10,11 @@ import ContactSection from './components/sections/ContactSection';
 import { useSectionRoute } from './hooks/useSectionRoute';
 import { useMotionPreferences } from './hooks/useMotionPreferences';
 import { useMobileLayout } from './hooks/useMobileLayout';
+import { skillGroups } from './data/portfolio';
 
 const ParticleStage = lazy(() => import('./components/ParticleStage'));
+// Journey and Skills share the full-screen night sky and its slower, held transitions.
+const SKY_SECTIONS = ['journey', 'skills'];
 const sections = {
   home: HomeSection,
   about: AboutSection,
@@ -41,9 +44,12 @@ export default function App() {
   const [displaySection, setDisplaySection] = useState(section);
   const previousSectionRef = useRef(section);
   const contentTransitionRef = useRef(null);
+  // The Skills flame tint, chosen in the Skills inventory and drawn by the shared particles.
+  const [skillFlame, setSkillFlame] = useState(() => ({ color: skillGroups[0].flame, flare: false }));
+  const onSkillFlame = useCallback((color, flare) => setSkillFlame({ color, flare }), []);
   const previous = previousSectionRef.current;
   const globePair = (previous === 'home' || previous === 'about') && section === 'projects' ||
-    previous === 'projects' && (section === 'home' || section === 'about') || previous === 'journey' || section === 'journey';
+    previous === 'projects' && (section === 'home' || section === 'about') || SKY_SECTIONS.includes(previous) || SKY_SECTIONS.includes(section);
   const holdContent = previous !== section ? globePair && animated && !motionPaused && !debugBalloon : Boolean(contentTransitionRef.current);
   const visibleSection = holdContent ? displaySection : section;
   const Section = sections[visibleSection];
@@ -80,7 +86,7 @@ export default function App() {
     }
     const fromGlobe = previous === 'home' || previous === 'about';
     const toGlobe = section === 'home' || section === 'about';
-    const pair = fromGlobe && section === 'projects' || previous === 'projects' && toGlobe || previous === 'journey' || section === 'journey';
+    const pair = fromGlobe && section === 'projects' || previous === 'projects' && toGlobe || SKY_SECTIONS.includes(previous) || SKY_SECTIONS.includes(section);
     if (pair && animated && !motionPaused && !debugBalloon) {
       contentTransitionRef.current = {
         to: section, switched: false, progress: 0,
@@ -132,6 +138,7 @@ export default function App() {
             <Suspense fallback={<div className="particle-loading" />}>
               <ParticleStage
                 journeyView={journeyView}
+                skillFlame={skillFlame}
                 section={debugBalloon ? 'projects' : section === 'about' ? 'home' : section}
                 visualSection={debugBalloon ? 'projects' : section}
                 reducedMotion={reducedMotion}
@@ -150,7 +157,7 @@ export default function App() {
           tabIndex={-1}
           onClick={onNavigate}
         >
-          <Section journeyView={journeyView} onJourneyView={setJourneyView} />
+          <Section journeyView={journeyView} onJourneyView={setJourneyView} onSkillFlame={onSkillFlame} />
         </section>
       </main>
       <footer className="site-footer">

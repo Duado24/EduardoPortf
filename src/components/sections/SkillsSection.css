@@ -1,0 +1,259 @@
+/* Skills shares Journey's full-screen sky region; the renderers place the bonfire
+   inside it per viewport (campfireLayout in campfireTarget.js). */
+.portfolio-shell.state-skills .visual-region {
+  width: max(100vw, 100dvh);
+  height: max(100vw, 100dvh);
+  max-width: none;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.campfire-lede {
+  max-width: 30ch;
+  margin: 0;
+  font: 12px/1.7 var(--mono);
+  color: var(--muted);
+}
+
+.campfire-inventory {
+  position: absolute;
+  right: var(--edge);
+  top: 50%;
+  width: min(340px, 27vw);
+  transform: translateY(-50%);
+  border-top: 1px solid var(--rule);
+}
+
+.campfire-inventory-head {
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  padding: 12px 0 10px;
+  font: 10px/1.5 var(--mono);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.campfire-tabs {
+  display: grid;
+}
+
+.campfire-tabs button {
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  align-items: baseline;
+  padding: 11px 0;
+  border: 0;
+  border-bottom: 1px solid #80645e45;
+  background: none;
+  color: var(--muted);
+  text-align: left;
+  transition: color .2s;
+}
+
+.campfire-tabs button::before {
+  content: "";
+  position: absolute;
+  left: -14px;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+  transform: translateY(-50%) scale(0);
+  transition: transform .3s;
+}
+
+.campfire-tabs button:hover,
+.campfire-tabs button[aria-selected="true"] {
+  color: var(--ink);
+}
+
+.campfire-tabs button[aria-selected="true"]::before {
+  transform: translateY(-50%) scale(1);
+}
+
+.campfire-tab-number {
+  font: 10px/1 var(--mono);
+  color: var(--rule);
+  transition: color .2s;
+}
+
+.campfire-tabs button[aria-selected="true"] .campfire-tab-number {
+  color: var(--accent);
+}
+
+.campfire-tab-name {
+  font-size: 14px;
+  letter-spacing: -.01em;
+}
+
+.campfire-tab-short {
+  display: none;
+}
+
+.campfire-detail {
+  padding: 16px 0 0;
+  min-height: 92px;
+}
+
+.campfire-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  animation: campfire-rise .45s ease both;
+}
+
+.campfire-chips li {
+  padding: 5px 9px;
+  border: 1px solid #80645e70;
+  background: #21171999;
+  font: 11px/1.3 var(--mono);
+  color: var(--body);
+}
+
+@keyframes campfire-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* Narrow desktop windows: fire centered, inventory along the bottom. */
+@media (max-width: 900px) {
+  .campfire-lede {
+    display: none;
+  }
+
+  .campfire-inventory {
+    top: auto;
+    bottom: 15%;
+    left: var(--edge);
+    width: auto;
+    transform: none;
+  }
+
+  .campfire-tabs {
+    grid-template-columns: repeat(5, 1fr);
+  }
+
+  .campfire-tabs button {
+    grid-template-columns: 1fr;
+    gap: 5px;
+    padding: 10px 0;
+  }
+
+  .campfire-tabs button::before {
+    left: 50%;
+    top: auto;
+    bottom: -3px;
+    transform: translateX(-50%) scale(0);
+  }
+
+  .campfire-tabs button[aria-selected="true"]::before {
+    transform: translateX(-50%) scale(1);
+  }
+
+  .campfire-tab-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .campfire-tab-short {
+    display: block;
+    font: 11px/1.2 var(--mono);
+  }
+
+  .campfire-detail {
+    min-height: 0;
+  }
+}
+
+/* Phones: like Journey, the page scrolls. The 400px sky band sits at the top with
+   the bonfire in its lower half; the inventory follows below it. */
+@media (max-width: 760px) {
+  .portfolio-shell.state-skills {
+    position: relative;
+    inset: auto;
+    height: auto;
+    min-height: 100dvh;
+    overflow: clip;
+  }
+
+  .portfolio-shell.state-skills .site-header {
+    position: relative;
+    inset: auto;
+    margin: 0 24px;
+    height: 76px;
+  }
+
+  .portfolio-shell.state-skills .portfolio-main {
+    position: relative;
+    inset: auto;
+    margin: 0;
+  }
+
+  .portfolio-shell.state-skills .presentation-state {
+    position: relative;
+    inset: auto;
+  }
+
+  .portfolio-shell.state-skills .visual-region {
+    width: max(100vw, 400px);
+    height: max(100vw, 400px);
+    top: 270px;
+  }
+
+  .portfolio-shell.state-skills .site-footer {
+    position: relative;
+    inset: auto;
+    margin: 0 24px;
+    height: 64px;
+  }
+
+  .portfolio-shell.state-skills .campfire {
+    position: relative;
+    inset: auto;
+    padding: 20px 24px 0;
+  }
+
+  .portfolio-shell.state-skills .skills-introduction {
+    position: relative;
+    left: auto;
+    top: auto;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .portfolio-shell.state-skills .campfire-inventory {
+    position: relative;
+    inset: auto;
+    width: auto;
+    transform: none;
+    margin: 360px 0 28px;
+  }
+
+  .portfolio-shell.state-skills .campfire .back-home {
+    position: relative;
+    left: 50%;
+    top: auto;
+    transform: translateX(-50%);
+    margin-bottom: 24px;
+  }
+
+  .campfire-tabs button {
+    min-height: 44px;
+  }
+}
