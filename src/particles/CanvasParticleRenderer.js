@@ -9,6 +9,7 @@ import {
 } from './shapeTargets.js'
 import { particleProgress, sampleMorph, sampleMorphValues } from './aerostaticTransition.js'
 import { placeWatch, watchFlare, watchLayout, watchShade } from './watchTarget.js'
+import { boardLayout, boardShade, createBoardTarget } from './boardTarget.js'
 
 // Journey and Skills share the full-screen sky region and its slow transitions.
 const SKY_STATES = ['journey', 'skills']
@@ -39,6 +40,22 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
   const targetSize = new Float32Array(count).fill(1)
   if (visualState(section) === 'journey') { sky.project(target, targetStyle, targetSize); sourceSize.set(targetSize) }
   if (currentState === 'skills') { targetSize.set(targets.skills.sizes); sourceSize.set(targetSize) }
+  const boardOut = [0, 0, 1, 0]
+  const hoverState = [0, 0, 0]
+  let hoverOn = false
+  placeBoardTarget()
+  if (currentState === 'contact') {
+    for (const array of [source, target]) array.set(targets.contact.positions)
+    for (const array of [sourceStyle, targetStyle]) array.set(targets.contact.style)
+    for (const array of [sourceSize, targetSize]) array.set(targets.contact.sizes)
+  }
+
+  // The board is rebuilt per viewport: its grid and dot count change between desktop and phones.
+  function placeBoardTarget() {
+    const built = createBoardTarget(count, boardLayout({ width: window.innerWidth, height: window.innerHeight }))
+    for (const name of ['positions', 'style', 'sizes', 'board']) targets.contact[name].set(built[name])
+    targets.contact.grid = built.grid
+  }
   const sourceDepth = new Float32Array(count * 2)
   const targetDepth = new Float32Array(count * 2)
   const delays = targets.projects.delays
@@ -47,11 +64,11 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
     sourceDepth[i * 2 + 1] = currentState === 'projects' ? 1 : 0
   }
   targetDepth.set(sourceDepth)
-  // Ten opacity buckets each for base, accent and the (tintable) Skills flame.
-  const buckets = Array.from({ length: 30 }, () => [])
+  // Ten opacity buckets each: 0 base, 10 accent, 20 tintable flame, 30 the Contact board's Peru red.
+  const buckets = Array.from({ length: 40 }, () => [])
   const colors = buckets.map((_, index) => {
     const opacity = (index % 10 + 1) / 10
-    return index >= 10 ? `rgba(220,128,121,${opacity})` : `rgba(236,225,211,${opacity})`
+    return index >= 30 ? `rgba(232,38,54,${opacity})` : index >= 10 ? `rgba(220,128,121,${opacity})` : `rgba(236,225,211,${opacity})`
   })
   const flameColor = flame.slice()
   let flameTarget = flame.slice()
@@ -107,6 +124,30 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
   let descentSign = 0
   let sourceLift = 0
   let targetLift = 0
+  let boardWeight = currentState === 'contact' ? 1 : 0
+  let sourceBoard = boardWeight
+  let targetBoard = boardWeight
+
+  function placeBoard() {
+    placeBoardTarget()
+    if (currentState !== 'contact') return
+    target.set(targets.contact.positions)
+    targetStyle.set(targets.contact.style)
+    targetSize.set(targets.contact.sizes)
+  }
+
+  // The hover block snaps to cells; its strength eases in and out with the frame loop.
+  function setBoardHover({ col = hoverState[0], row = hoverState[1], on = false } = {}) {
+    if (disposed) return
+    hoverState[0] = col
+    hoverState[1] = row
+    hoverOn = on
+    if (paused || reduced || !canAnimate()) {
+      hoverState[2] = on ? 1 : 0
+      draw()
+    }
+    resetAnimationClock()
+  }
   sky.setDescent(currentState === 'skills' ? 1 : 0)
 
   // The sky stays up between Journey and Skills; arriving from elsewhere it fades in late in the morph.
@@ -157,7 +198,7 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
 
   function canAnimate() {
     return !disposed && !document.hidden && (inViewport || transitioning) && !paused &&
-      (transitioning || (!reduced && (currentState === 'home' || currentState === 'projects' || currentState === 'skills' || currentState === 'journey' && sky.moving)))
+      (transitioning || (!reduced && (currentState === 'home' || currentState === 'projects' || currentState === 'skills' || currentState === 'contact' || currentState === 'journey' && sky.moving)))
   }
 
   function draw() {
@@ -193,6 +234,15 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
         watchSize = 1 + (shade[3] - 1) * skillsWeight
         watchFlame = skillsWeight > 0.5 && shade[4] > 0.5
       }
+      let boardAlpha = 0
+      let boardColor = 0
+      if (boardWeight) {
+        boardShade(targets.contact.board, i, skillsTime, hoverState, target[p], targets.contact.grid, boardOut)
+        x += boardOut[0] * targets.contact.grid[2] * boardWeight
+        boardAlpha = boardOut[1]
+        watchSize *= 1 + (boardOut[2] - 1) * boardWeight
+        if (boardWeight > 0.5) boardColor = boardOut[3]
+      }
       if (transitionDirection) {
         const seed = (i * 0.61803398875) % 1
         const sweep = Math.sin(Math.PI * movement)
@@ -211,9 +261,12 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
       const depthGlobeWeight = sourceDepth[s] + (targetDepth[s] - sourceDepth[s]) * movement
       const depthProjectWeight = sourceDepth[s + 1] + (targetDepth[s + 1] - sourceDepth[s + 1]) * movement
       const shaded = brightness * (1 + (globeDepth - 1) * depthGlobeWeight + (projectDepth - 1) * depthProjectWeight)
-      const opacity = shaded + (watchAlpha - shaded) * skillsWeight
+      const watched = shaded + (watchAlpha - shaded) * skillsWeight
+      const opacity = watched + (boardAlpha - watched) * boardWeight
       if (opacity < 0.025) continue
-      const bucket = buckets[(watchFlame ? 20 : accent > 0.35 ? 10 : 0) + Math.min(9, Math.max(0, Math.round(opacity * 10) - 1))]
+      // Board colors: 1 coral glow uses the accent set, 2 Peru red has its own, 3 white reads as cream.
+      const set = boardColor === 2 ? 30 : boardColor === 1 ? 10 : boardColor === 3 ? 0 : watchFlame ? 20 : accent > 0.35 ? 10 : 0
+      const bucket = buckets[set + Math.min(9, Math.max(0, Math.round(opacity * 10) - 1))]
       bucket.push(width / 2 + (rotatedX * swayCosine - rotatedY * swaySine) * scale,
         height / 2 - (rotatedX * swaySine + rotatedY * swayCosine + float) * scale,
         radius * (sourceSize[i] + (targetSize[i] - sourceSize[i]) * movement) * (1 + accent * 0.2) * watchSize)
@@ -241,6 +294,7 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
     globeWeight = targetGlobe
     projectWeight = targetProject
     skillsWeight = targetSkills
+    boardWeight = targetBoard
     if (descentSign) updateDescent(1)
     descentSign = 0
     sourceLift = targetLift = 0
@@ -265,7 +319,8 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
     const delta = Math.min(difference, 100)
     if (currentState === 'journey' && sky.moving) { sky.update(delta / 1000); updateSkyTarget() }
     if (!reduced && (projectWeight || targetProject)) projectPhase += delta / 1000
-    if (!reduced && (skillsWeight || targetSkills)) skillsTime += delta / 1000
+    if (!reduced && (skillsWeight || targetSkills || boardWeight || targetBoard)) skillsTime += delta / 1000
+    hoverState[2] += ((hoverOn ? 1 : 0) - hoverState[2]) * Math.min(1, delta / 1000 * 8)
     tintFlame(delta / 1000)
     flare = watchFlare(skillsTime, burst)
     if (transitioning) {
@@ -281,6 +336,7 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
         : transitionDirection === -1 ? smoothProgress(progress / 0.34) : eased
       projectWeight = sourceProject + (targetProject - sourceProject) * idleProgress
       skillsWeight = sourceSkills + (targetSkills - sourceSkills) * idleProgress
+      boardWeight = sourceBoard + (targetBoard - sourceBoard) * idleProgress
       updateDescent(progress)
       placementPointScale = onMorphFrame?.(placementProgressBase + (1 - placementProgressBase) * progress) ?? 1
       if (elapsed >= transitionDuration) finishTransition()
@@ -328,7 +384,7 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
     pointRadius = narrow ? 0.95 : 1.075
     duration = narrow ? 450 : 1000
     drawCount = Math.min(drawCount, narrow ? 1200 : count)
-    placeSkills()
+    placeBoard()
     draw()
   }
 
@@ -344,6 +400,7 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
     sampleMorphValues(sourceSize, targetSize, morph, delays, transitionDirection, 1, sourceSize)
     targetSize.fill(1)
     if (nextState === 'skills') targetSize.set(targets.skills.sizes)
+    if (nextState === 'contact') { placeBoard(); targetSize.set(targets.contact.sizes) }
     if (nextState === 'journey') sky.project(targets.journey.positions, targets.journey.style, targetSize)
     target.set(targets[nextState].positions)
     targetStyle.set(targets[nextState].style)
@@ -357,6 +414,8 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
     targetProject = nextState === 'projects' ? 1 : 0
     sourceSkills = skillsWeight
     targetSkills = nextState === 'skills' ? 1 : 0
+    sourceBoard = boardWeight
+    targetBoard = nextState === 'contact' ? 1 : 0
     sourceRotation = Math.atan2(Math.sin(rotation + idleYaw), Math.cos(rotation + idleYaw))
     rotation = sourceRotation
     idleYaw = 0
@@ -443,5 +502,5 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
   document.addEventListener('visibilitychange', visibilityChanged)
   resize()
   schedule()
-  return { setJourneyView, setSection, setMotionPreferences, setFlame, destroy, getRenderSize: () => width }
+  return { setJourneyView, setSection, setMotionPreferences, setFlame, setBoardHover, destroy, getRenderSize: () => width }
 }

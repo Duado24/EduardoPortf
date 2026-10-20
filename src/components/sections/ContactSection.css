@@ -1,0 +1,226 @@
+/* Contact: the shared particles draw a dot-matrix board (boardTarget.js) inside a
+   full-screen region, like Journey and Skills. --board-* come from the same layout
+   (CSS px from the region's center), so the hover layer and links sit on the dots. */
+.portfolio-shell.state-contact .visual-region {
+  width: max(100vw, 100dvh);
+  height: max(100vw, 100dvh);
+  max-width: none;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.board-composition {
+  --board-cy: 50%;
+}
+
+.board {
+  position: absolute;
+  left: calc(50% + var(--board-x));
+  top: calc(var(--board-cy) + var(--board-y));
+  width: var(--board-w);
+  height: var(--board-h);
+  pointer-events: auto;
+  cursor: crosshair;
+  touch-action: pan-y;
+}
+
+/* Snapped to the letter grid: a faint frame with coral corner brackets. */
+.board-block {
+  --bracket: var(--accent);
+  position: absolute;
+  border: 1px solid #f3ebe11f;
+  background:
+    linear-gradient(var(--bracket), var(--bracket)) top left / 12px 2px no-repeat,
+    linear-gradient(var(--bracket), var(--bracket)) top left / 2px 12px no-repeat,
+    linear-gradient(var(--bracket), var(--bracket)) top right / 12px 2px no-repeat,
+    linear-gradient(var(--bracket), var(--bracket)) top right / 2px 12px no-repeat,
+    linear-gradient(var(--bracket), var(--bracket)) bottom left / 12px 2px no-repeat,
+    linear-gradient(var(--bracket), var(--bracket)) bottom left / 2px 12px no-repeat,
+    linear-gradient(var(--bracket), var(--bracket)) bottom right / 12px 2px no-repeat,
+    linear-gradient(var(--bracket), var(--bracket)) bottom right / 2px 12px no-repeat;
+  transition: left .08s ease-out, top .08s ease-out;
+  pointer-events: none;
+}
+
+.board-links {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Desktop: the four links hold the board's corners, aligned to its top and bottom edges. */
+.board-link {
+  position: absolute;
+  /* Never above the heading's baseline area. */
+  top: max(calc(var(--board-cy) + var(--board-y)), 248px);
+}
+
+.board-link-top-left,
+.board-link-bottom-left {
+  left: var(--edge);
+}
+
+.board-link-top-right,
+.board-link-bottom-right {
+  right: var(--edge);
+  text-align: right;
+}
+
+.board-link-bottom-left,
+.board-link-bottom-right {
+  top: calc(var(--board-cy) + var(--board-y) + var(--board-h));
+  transform: translateY(-100%);
+}
+
+.board-link a {
+  display: grid;
+  gap: 8px;
+  padding: 6px 0;
+  color: var(--ink);
+}
+
+.board-link-label {
+  font: 11px/1 var(--mono);
+  letter-spacing: .06em;
+  color: var(--muted);
+}
+
+.board-link-value {
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -.01em;
+  text-decoration: underline 1px transparent;
+  text-underline-offset: 5px;
+  transition: text-decoration-color .2s;
+}
+
+.board-link-arrow {
+  display: inline-block;
+  margin-left: 10px;
+  font-size: 13px;
+  color: var(--accent);
+  transition: transform .15s;
+}
+
+.board-link a:hover .board-link-value,
+.board-link a:focus-visible .board-link-value {
+  text-decoration-color: var(--accent);
+}
+
+.board-link a:hover .board-link-arrow,
+.board-link a:focus-visible .board-link-arrow {
+  transform: translate(2px, -2px);
+}
+
+/* Narrower desktop windows: board centered higher, links in one row beneath it. */
+@media (min-width: 761px) and (max-width: 1100px) {
+  .board-links {
+    position: absolute;
+    left: var(--edge);
+    right: var(--edge);
+    top: calc(var(--board-cy) + var(--board-y) + var(--board-h) + 28px);
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 20px;
+  }
+
+  .board-link,
+  .board-link-bottom-left,
+  .board-link-bottom-right {
+    position: static;
+    transform: none;
+    text-align: left;
+  }
+
+  .board-link-value {
+    font-size: 15px;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* Phones: the page scrolls. The board sits under the heading; the links follow as a list. */
+@media (max-width: 760px) {
+  .portfolio-shell.state-contact {
+    position: relative;
+    inset: auto;
+    height: auto;
+    min-height: 100dvh;
+    overflow: clip;
+  }
+
+  .portfolio-shell.state-contact .site-header {
+    position: relative;
+    inset: auto;
+    margin: 0 24px;
+    height: 76px;
+  }
+
+  .portfolio-shell.state-contact .portfolio-main {
+    position: relative;
+    inset: auto;
+    margin: 0;
+  }
+
+  .portfolio-shell.state-contact .presentation-state {
+    position: relative;
+    inset: auto;
+  }
+
+  .portfolio-shell.state-contact .visual-region {
+    width: max(100vw, 400px);
+    height: max(100vw, 400px);
+    top: 330px;
+  }
+
+  .portfolio-shell.state-contact .site-footer {
+    position: relative;
+    inset: auto;
+    margin: 0 24px;
+    height: 64px;
+  }
+
+  .portfolio-shell.state-contact .board-composition {
+    --board-cy: 330px;
+    position: relative;
+    inset: auto;
+    padding: 20px 24px 0;
+  }
+
+  .portfolio-shell.state-contact .board-introduction {
+    position: relative;
+    left: auto;
+    top: auto;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .portfolio-shell.state-contact .board-links {
+    /* The board sits in the particle layer; clear it, less the intro above this list. */
+    margin-top: calc(var(--board-cy) + var(--board-y) + var(--board-h) - 56px);
+    display: grid;
+  }
+
+  .board-link,
+  .board-link-bottom-left,
+  .board-link-bottom-right {
+    position: static;
+    transform: none;
+    text-align: left;
+    border-top: 1px solid #80645e45;
+  }
+
+  .board-link a {
+    padding: 14px 0;
+    min-height: 44px;
+  }
+
+  .portfolio-shell.state-contact .board-composition .back-home {
+    position: relative;
+    left: 50%;
+    top: auto;
+    transform: translateX(-50%);
+    margin: 28px 0 24px;
+  }
+}

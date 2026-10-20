@@ -2,7 +2,7 @@
 
 All six sections use one shared point interface: geographic globe on Home/About,
 volumetric aerostatic globe on Projects, a distributed southern sky on Journey,
-a knight keeping watch by a campfire on Skills, and an envelope on Contact. Journey's full sky,
+a knight keeping watch by a campfire on Skills, and a dot-matrix board on Contact. Journey's full sky,
 landscape, and selectable milestone anchors are SVG and semantic HTML over
 that same renderer; there is no second WebGL context or continuous scene loop.
 Its visual coordinates stay separate from the factual milestone data. Normal
@@ -127,3 +127,14 @@ region Skills shares with Journey. Arriving from Journey, the sky tilts down to
 the horizon. Fire lighting, flame, sparks, smoke and dust animate in the vertex
 shader (and `watchShade()` for Canvas2D); the selected skill category tints the
 flame and its light, and stokes the fire.
+
+## Contact: the board
+
+`boardTarget.js` turns the shared particles into the dot-matrix board from
+`references/claude/Contact Board (1).html`: dim random letters, a dotted frame,
+and "READY TO / CONNECT?" lit at double size on desktop. The board is rebuilt per
+viewport (24×10 cells on desktop, 12×8 on phones). The hover block snaps to a
+5×3 group of cells and glitches those letters in Peru's red and white; the
+Contact page tracks the pointer over a transparent layer laid exactly on the
+dots and passes the cell to the renderer. `boardShade()` mirrors the shader for
+Canvas2D.

@@ -25,6 +25,7 @@ import {
 } from './shapeTargets.js'
 import { sampleMorph, sampleMorphValues } from './aerostaticTransition.js'
 import { placeWatch, WATCH_CAMERA, watchFlare, watchLayout } from './watchTarget.js'
+import { boardLayout, createBoardTarget } from './boardTarget.js'
 
 // Journey and Skills share the full-screen sky region and its slow transitions.
 const SKY_STATES = ['journey', 'skills']
@@ -34,6 +35,7 @@ const vertexShader = /* glsl */ `
   attribute vec3 aTarget;
   attribute vec4 aWatchA;
   attribute vec4 aWatchB;
+  attribute vec4 aBoard;
   attribute float aSourceSize;
   attribute float aTargetSize;
   attribute vec2 aSourceStyle;
@@ -56,10 +58,14 @@ const vertexShader = /* glsl */ `
   uniform vec3 uWatchTarget;
   uniform vec4 uWatchCamera;
   uniform vec3 uWatchLayout;
+  uniform float uBoard;
+  uniform vec3 uBoardHover;
+  uniform vec4 uBoardGrid;
   varying float vOpacity;
   varying float vAccent;
   varying float vProject;
   varying vec4 vWatch;
+  varying float vHard;
 
   // The Last Watch camera (fixed, mirrored), placed in shared camera units; see watchTarget.js.
   vec3 watchView(vec3 q) {
@@ -68,6 +74,10 @@ const vertexShader = /* glsl */ `
     q = vec3(q.x, q.y * uWatchCamera.z - q.z * uWatchCamera.w, q.y * uWatchCamera.w + q.z * uWatchCamera.z);
     float w = 4.6 + q.z;
     return vec3(uWatchLayout.x - q.x / w * uWatchLayout.z, uWatchLayout.y + q.y / w * uWatchLayout.z, w);
+  }
+
+  float boardHash(float a, float b) {
+    return fract(sin(a * 12.9898 + b * 78.233) * 43758.5453);
   }
 
   void main() {
@@ -138,6 +148,43 @@ const vertexShader = /* glsl */ `
         watchSize = size / 1.05 * still.z / moved.z;
       }
     }
+
+    // Contact board; mirrors boardShade() in boardTarget.js.
+    // Kinds: 0 dim letter, 1 lit message, 2 frame, 3 glow, 4 hidden spare.
+    vec4 board = vec4(0.949, 0.922, 0.882, 0.0);
+    float boardSize = 1.0;
+    if (uBoard > 0.001) {
+      float col = aBoard.x;
+      float row = aBoard.y;
+      float kind = aBoard.z;
+      float glyphRow = aBoard.w;
+      if (kind < 0.5) {
+        float u = fract(uTime / 53.0 + boardHash(col, row));
+        board.a = 0.16 + 0.5 * sin(min(1.0, u * 53.0 / 2.2) * 3.14159);
+      } else if (kind < 1.5) {
+        board.a = 0.9 + 0.1 * sin(uTime * 2.4 + aSeed * 20.0);
+      } else if (kind < 2.5) {
+        board.a = 0.3;
+      } else if (kind < 3.5) {
+        board = vec4(0.863, 0.502, 0.475, 0.14);
+      }
+      float strength = uBoardHover.z;
+      if (strength > 0.01 && kind < 1.5 && abs(col - uBoardHover.x) <= 2.0 && abs(row - uBoardHover.y) <= 1.0) {
+        float stepT = floor(uTime * 14.0);
+        float line = row * 7.0 + glyphRow;
+        float r = boardHash(line, stepT);
+        float r2 = boardHash(line + 99.0, floor(stepT / 3.0));
+        p.x += ((r - 0.5) * (r > 0.86 ? 0.9 : 0.18) + (r2 > 0.93 ? -0.45 : 0.0)) * strength * uBoardGrid.z;
+        // Peru's flag across the block: red, white, red.
+        float across = (aTarget.x - (uBoardGrid.x + (uBoardHover.x - 2.0) * uBoardGrid.z)) / (5.0 * uBoardGrid.z);
+        board.rgb = across < 1.0 / 3.0 || across > 2.0 / 3.0 ? vec3(0.91, 0.149, 0.212) : vec3(1.0);
+        board.a = (kind < 0.5 ? 0.45 : 1.0) * (0.6 + 0.4 * strength);
+        if (mod(glyphRow, 2.0) > 0.5) board.a *= 0.55;
+        board.a *= 1.0 + 0.35 * (boardHash(stepT, 3.0) - 0.5);
+        boardSize = 1.0 + 0.2 * strength;
+      }
+      board.a = min(board.a, 1.0);
+    }
     if (abs(uDirection) > 0.5) {
       float sweep = sin(3.14159265359 * m);
       float phase = aSeed * 6.28318530718;
@@ -152,12 +199,14 @@ const vertexShader = /* glsl */ `
     float depth = 0.35 + 0.65 * smoothstep(-0.35, 0.85, p.z);
     float projectDepth = 0.20 + 0.80 * smoothstep(-0.52, 0.52, p.z);
     vOpacity = mix(style.x * (1.0 + (depth - 1.0) * depthWeights.x + (projectDepth - 1.0) * depthWeights.y), watch.a, uIdle);
+    vOpacity = mix(vOpacity, board.a, uBoard);
     vAccent = style.y;
     vProject = depthWeights.y;
-    // Reference colors are sRGB; the output stage expects linear.
-    vWatch = vec4(pow(watch.rgb, vec3(2.2)), uIdle);
+    // Scene colors are sRGB; the output stage expects linear. Skills and Contact never settle together.
+    vWatch = uBoard > uIdle ? vec4(pow(board.rgb, vec3(2.2)), uBoard) : vec4(pow(watch.rgb, vec3(2.2)), uIdle);
+    vHard = uIdle;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
-    gl_PointSize = mix(aSourceSize, aTargetSize, m) * uPointSize * mix(1.0, 1.2, vAccent) * mix(1.0, watchSize, uIdle);
+    gl_PointSize = mix(aSourceSize, aTargetSize, m) * uPointSize * mix(1.0, 1.2, vAccent) * mix(1.0, watchSize, uIdle) * mix(1.0, boardSize, uBoard);
   }
 `
 
@@ -168,12 +217,13 @@ const fragmentShader = /* glsl */ `
   varying float vAccent;
   varying float vProject;
   varying vec4 vWatch;
+  varying float vHard;
 
   void main() {
     float radius = length(gl_PointCoord - vec2(0.5));
     if (radius > 0.5) discard;
-    // Skills draws solid dots like its reference; other states keep soft edges.
-    float coverage = mix(1.0 - smoothstep(mix(0.25, 0.40, vProject), 0.5, radius), 1.0, vWatch.a);
+    // Skills draws solid dots like its reference; other states, Contact's glow included, keep soft edges.
+    float coverage = mix(1.0 - smoothstep(mix(0.25, 0.40, vProject), 0.5, radius), 1.0, vHard);
     gl_FragColor = vec4(mix(mix(uBaseColor, uAccentColor, vAccent), vWatch.rgb, vWatch.a), coverage * vOpacity);
     #include <colorspace_fragment>
   }
@@ -196,7 +246,13 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
   const sourceSize = new Float32Array(count).fill(1)
   const targetSize = new Float32Array(count).fill(1)
   if (visualState(section) === 'journey') { sky.project(target, targetStyle, targetSize); sourceSize.set(targetSize) }
+  placeBoardTarget()
   if (initialState === 'skills') { targetSize.set(targets.skills.sizes); sourceSize.set(targetSize) }
+  if (initialState === 'contact') {
+    for (const array of [source, target]) array.set(targets.contact.positions)
+    for (const array of [sourceStyle, targetStyle]) array.set(targets.contact.style)
+    for (const array of [sourceSize, targetSize]) array.set(targets.contact.sizes)
+  }
   const sourceDepth = new Float32Array(count * 2)
   const targetDepth = new Float32Array(count * 2)
   const delays = targets.projects.delays
@@ -231,6 +287,7 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
   geometry.setAttribute('aSeed', new BufferAttribute(seeds, 1))
   geometry.setAttribute('aWatchA', new BufferAttribute(targets.skills.watchA, 4))
   geometry.setAttribute('aWatchB', new BufferAttribute(targets.skills.watchB, 4))
+  geometry.setAttribute('aBoard', new BufferAttribute(targets.contact.board, 4))
 
   const material = new ShaderMaterial({
     vertexShader,
@@ -257,6 +314,9 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
       uIdle: { value: initialState === 'skills' ? 1 : 0 },
       uTime: { value: 0 },
       uFlare: { value: 0 },
+      uBoard: { value: initialState === 'contact' ? 1 : 0 },
+      uBoardHover: { value: new Vector3(0, 0, 0) },
+      uBoardGrid: { value: new Vector4(...targets.contact.grid) },
     },
   })
 
@@ -302,6 +362,10 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
   let sourceSkills = skillsWeight
   let targetSkills = skillsWeight
   let descentSign = 0
+  let boardWeight = initialState === 'contact' ? 1 : 0
+  let sourceBoard = boardWeight
+  let targetBoard = boardWeight
+  const boardHover = { col: 0, row: 0, on: false, strength: 0 }
   const flameColor = flame.slice()
   let flameTarget = flame.slice()
   let burst = 0
@@ -324,7 +388,7 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
 
   function canAnimate() {
     return !disposed && !document.hidden && (inViewport || transitioning) && !paused &&
-      (transitioning || !reduced && (currentState === 'home' || currentState === 'projects' || currentState === 'skills' || currentState === 'journey' && sky.moving))
+      (transitioning || !reduced && (currentState === 'home' || currentState === 'projects' || currentState === 'skills' || currentState === 'contact' || currentState === 'journey' && sky.moving))
   }
 
   // The sky stays up between Journey and Skills; arriving from elsewhere it fades in late in the morph.
@@ -373,6 +437,38 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
     geometry.attributes.aTarget.needsUpdate = true
   }
 
+  // The board is rebuilt per viewport: its grid and dot count change between desktop and phones.
+  function placeBoardTarget() {
+    const built = createBoardTarget(count, boardLayout({ width: window.innerWidth, height: window.innerHeight }))
+    for (const name of ['positions', 'style', 'sizes', 'board']) targets.contact[name].set(built[name])
+    targets.contact.grid = built.grid
+  }
+
+  function placeBoard() {
+    placeBoardTarget()
+    material.uniforms.uBoardGrid.value.set(...targets.contact.grid)
+    geometry.attributes.aBoard.needsUpdate = true
+    if (currentState !== 'contact') return
+    target.set(targets.contact.positions)
+    targetStyle.set(targets.contact.style)
+    targetSize.set(targets.contact.sizes)
+    for (const name of ['aTarget', 'aTargetStyle', 'aTargetSize']) geometry.attributes[name].needsUpdate = true
+  }
+
+  // The hover block snaps to cells; its strength eases in and out with the frame loop.
+  function setBoardHover({ col = boardHover.col, row = boardHover.row, on = false } = {}) {
+    if (disposed) return
+    Object.assign(boardHover, { col, row, on })
+    material.uniforms.uBoardHover.value.x = col
+    material.uniforms.uBoardHover.value.y = row
+    if (paused || reduced || !canAnimate()) {
+      boardHover.strength = on ? 1 : 0
+      material.uniforms.uBoardHover.value.z = boardHover.strength
+      draw()
+    }
+    resetAnimationClock()
+  }
+
   function positionProject() {
     points.rotation.z = Math.sin(projectPhase * 0.72) * 0.018 * projectWeight
     points.position.y = (Math.sin(projectPhase * 1.05) * 0.024 + Math.sin(projectPhase * 0.43) * 0.009) * projectWeight
@@ -391,6 +487,8 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
     projectWeight = targetProject
     skillsWeight = targetSkills
     material.uniforms.uIdle.value = skillsWeight
+    boardWeight = targetBoard
+    material.uniforms.uBoard.value = boardWeight
     if (descentSign) updateDescent(1)
     descentSign = 0
     material.uniforms.uSourceLift.value = 0
@@ -418,7 +516,9 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
     const delta = Math.min(difference, 100)
     if (currentState === 'journey' && sky.moving) { sky.update(delta / 1000); updateSkyTarget() }
     if (!reduced && (projectWeight || targetProject)) projectPhase += delta / 1000
-    if (!reduced && (skillsWeight || targetSkills)) material.uniforms.uTime.value += delta / 1000
+    if (!reduced && (skillsWeight || targetSkills || boardWeight || targetBoard)) material.uniforms.uTime.value += delta / 1000
+    boardHover.strength += ((boardHover.on ? 1 : 0) - boardHover.strength) * Math.min(1, delta / 1000 * 8)
+    material.uniforms.uBoardHover.value.z = boardHover.strength
     updateFlame(delta / 1000)
     if (transitioning) {
       elapsed += delta
@@ -432,6 +532,8 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
       projectWeight = sourceProject + (targetProject - sourceProject) * idleProgress
       skillsWeight = sourceSkills + (targetSkills - sourceSkills) * idleProgress
       material.uniforms.uIdle.value = skillsWeight
+      boardWeight = sourceBoard + (targetBoard - sourceBoard) * idleProgress
+      material.uniforms.uBoard.value = boardWeight
       updateDescent(raw)
       placementPointScale = onMorphFrame?.(placementProgressBase + (1 - placementProgressBase) * raw) ?? 1
       if (elapsed >= transitionDuration) finishTransition()
@@ -474,6 +576,7 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
   function resize() {
     // Before the sky redraw, so it draws the new horizon once.
     placeSkills()
+    placeBoard()
     sky.resize()
     updateSkyTarget()
     if (disposed) return
@@ -523,6 +626,7 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
     if (nextState === 'journey') { sky.resize(); sky.project(targets.journey.positions, targets.journey.style) }
     targetSize.fill(1)
     if (nextState === 'skills') targetSize.set(targets.skills.sizes)
+    if (nextState === 'contact') { placeBoard(); targetSize.set(targets.contact.sizes) }
     if (nextState === 'journey') sky.project(targets.journey.positions, targets.journey.style, targetSize)
     target.set(targets[nextState].positions)
     targetStyle.set(targets[nextState].style)
@@ -535,6 +639,8 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
     targetProject = nextState === 'projects' ? 1 : 0
     sourceSkills = skillsWeight
     targetSkills = nextState === 'skills' ? 1 : 0
+    sourceBoard = boardWeight
+    targetBoard = nextState === 'contact' ? 1 : 0
     sourceRotation = Math.atan2(Math.sin(uniforms.uRotation.value), Math.cos(uniforms.uRotation.value))
     uniforms.uRotation.value = sourceRotation
     if (currentState === 'home' && !transitioning) lastGlobeRotation = sourceRotation
@@ -632,5 +738,5 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
   resize()
   schedule()
 
-  return { setJourneyView, setSection, setMotionPreferences, setFlame, destroy, getRenderSize: () => renderSize }
+  return { setJourneyView, setSection, setMotionPreferences, setFlame, setBoardHover, destroy, getRenderSize: () => renderSize }
 }

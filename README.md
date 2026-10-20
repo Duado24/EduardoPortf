@@ -60,8 +60,7 @@ competition results, or metrics are invented. Offline demonstration content is
 identified in the actual AutoCanv capture. The generator shows its built-in
 sample. The template image is a supplied formatter pattern preview rather than
 a live professional course. The CyberForce diagram is a conceptual responsibility
-map, not an asserted deployment topology. Asset provenance is in
-[public/project-media](public/project-media/README.md).
+map, not an asserted deployment topology.
 
 Private reference archives and credentials remain excluded from public files,
 bundles, and deployment artifacts. No live Canvas operations are required.

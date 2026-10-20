@@ -21,8 +21,10 @@ function clearPlacement(region) {
 }
 
 const SKY_STATES = ['journey', 'skills']
+// Sections whose particle region fills the screen; moving in or out of one animates the region.
+const FULL_STATES = [...SKY_STATES, 'contact']
 
-export default function ParticleStage({ section, journeyView, skillFlame, visualSection = section, motionPaused = false, reducedMotion = false, onRendererChange, onTransitionProgress }) {
+export default function ParticleStage({ section, journeyView, skillFlame, boardHover, visualSection = section, motionPaused = false, reducedMotion = false, onRendererChange, onTransitionProgress }) {
   const containerRef = useRef(null)
   const placementRef = useRef(null)
   const lastBoxRef = useRef(null)
@@ -81,12 +83,13 @@ export default function ParticleStage({ section, journeyView, skillFlame, visual
     const toGlobe = visualSection === 'about' || visualSection === 'home'
     const pair = (fromGlobe && visualSection === 'projects') || (previous === 'projects' && toGlobe)
     const skyPair = SKY_STATES.includes(previous) || SKY_STATES.includes(visualSection)
-    if (!pair && !skyPair && !interrupted) return
+    const fullPair = FULL_STATES.includes(previous) || FULL_STATES.includes(visualSection)
+    if (!pair && !fullPair && !interrupted) return
     const from = { ...lastBoxRef.current }
     region.style.transition = 'none'
     clearPlacement(region)
     const to = placementBox(region)
-    if (!motionPaused && rendererRef.current && (pair || skyPair || interrupted)) {
+    if (!motionPaused && rendererRef.current && (pair || fullPair || interrupted)) {
       placementRef.current = {
         from, to,
         renderSize: rendererRef.current.getRenderSize?.() ?? from.size,
@@ -126,8 +129,8 @@ export default function ParticleStage({ section, journeyView, skillFlame, visual
   }, [onMorphFrame])
 
   useEffect(() => {
-    onRendererChange?.(status.mode)
-  }, [status.mode, onRendererChange])
+    onRendererChange?.(status.mode, status.reason)
+  }, [status.mode, status.reason, onRendererChange])
 
   useEffect(() => {
     propertiesRef.current = { section, journeyView, motionPaused, reducedMotion, flame: skillFlame?.color }
@@ -138,6 +141,10 @@ export default function ParticleStage({ section, journeyView, skillFlame, visual
   useEffect(() => {
     if (skillFlame) rendererRef.current?.setFlame?.(skillFlame.color, skillFlame.flare)
   }, [skillFlame])
+
+  useEffect(() => {
+    if (boardHover) rendererRef.current?.setBoardHover?.(boardHover)
+  }, [boardHover])
 
   useEffect(() => {
     rendererRef.current?.setMotionPreferences(motionPaused, reducedMotion)

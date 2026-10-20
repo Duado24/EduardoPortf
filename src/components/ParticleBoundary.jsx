@@ -8,6 +8,10 @@ export default class ParticleBoundary extends Component {
     return { failed: true };
   }
 
+  componentDidCatch() {
+    this.props.onFailure?.();
+  }
+
   render() {
     return this.state.failed
       ? <div className="particle-loading" aria-hidden="true" />

@@ -35,6 +35,7 @@ export default function App() {
     restoreScroll: mobileLayout,
   });
   const systemReducedMotion = useMotionPreferences();
+  const [rendererReady, setRendererReady] = useState(false);
   const [motionEnabled, setMotionEnabled] = useState(false);
   const reducedMotion = systemReducedMotion && !motionEnabled;
   const [motionPaused, setMotionPaused] = useState(false);
@@ -47,6 +48,13 @@ export default function App() {
   // The Skills flame tint, chosen in the Skills inventory and drawn by the shared particles.
   const [skillFlame, setSkillFlame] = useState(() => ({ color: skillGroups[0].flame, flare: false }));
   const onSkillFlame = useCallback((color, flare) => setSkillFlame({ color, flare }), []);
+  // The Contact board's hover block (a cell, or off), drawn by the shared particles.
+  const [boardHover, setBoardHover] = useState(null);
+  const handleRendererChange = useCallback((mode, reason) => {
+    setRendererMode(mode);
+    setRendererReady(mode !== 'static' || reason !== 'loading');
+  }, []);
+  const onParticleFailure = useCallback(() => setRendererReady(true), []);
   const previous = previousSectionRef.current;
   const globePair = (previous === 'home' || previous === 'about') && section === 'projects' ||
     previous === 'projects' && (section === 'home' || section === 'about') || SKY_SECTIONS.includes(previous) || SKY_SECTIONS.includes(section);
@@ -131,19 +139,31 @@ export default function App() {
   return (
     <div className={`portfolio-shell state-${section} layout-${mobileLayout ? 'mobile' : 'desktop'}${motionEnabled ? ' motion-enabled' : ''}${debugBalloon ? ' debug-balloon' : ''}`}>
       <a className="skip-link" href="#main-content" onClick={skipToContent}>Skip to content</a>
+      <div className={`portfolio-loader${rendererReady ? ' is-ready' : ''}`}
+        role="status" aria-label="Loading portfolio" aria-hidden={rendererReady}>
+        <div className="portfolio-loader-content">
+          <span className="portfolio-loader-mark">EdViCo</span>
+          <span className="portfolio-loader-label">Preparing the experience</span>
+          <span className="portfolio-loader-track" aria-hidden="true">
+            <span className="portfolio-loader-progress" />
+          </span>
+          <span className="portfolio-loader-caption">A moment, please</span>
+        </div>
+      </div>
       <Header section={section} onNavigate={onNavigate} />
       <main id="main-content" className="portfolio-main" ref={mainRef} tabIndex={-1}>
         <div className="visual-region" aria-hidden="true">
-          <ParticleBoundary>
+          <ParticleBoundary onFailure={onParticleFailure}>
             <Suspense fallback={<div className="particle-loading" />}>
               <ParticleStage
                 journeyView={journeyView}
                 skillFlame={skillFlame}
+                boardHover={boardHover}
                 section={debugBalloon ? 'projects' : section === 'about' ? 'home' : section}
                 visualSection={debugBalloon ? 'projects' : section}
                 reducedMotion={reducedMotion}
                 motionPaused={debugBalloon || motionPaused}
-                onRendererChange={setRendererMode}
+                onRendererChange={handleRendererChange}
                 onTransitionProgress={onTransitionProgress}
               />
             </Suspense>
@@ -157,7 +177,7 @@ export default function App() {
           tabIndex={-1}
           onClick={onNavigate}
         >
-          <Section journeyView={journeyView} onJourneyView={setJourneyView} onSkillFlame={onSkillFlame} />
+          <Section journeyView={journeyView} onJourneyView={setJourneyView} onSkillFlame={onSkillFlame} onBoardHover={setBoardHover} />
         </section>
       </main>
       <footer className="site-footer">
