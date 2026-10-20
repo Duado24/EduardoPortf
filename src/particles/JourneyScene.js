@@ -1,4 +1,4 @@
-// Adapted from the user-supplied Claude reference. Catalog: d3-celestial (BSD-3-Clause).
+// Adapted from the original sky prototype. Catalog: d3-celestial (BSD-3-Clause).
 // Spherical camera and detail drawing only: the host particle renderer owns all
 // scheduling, visibility, resize, pause, reduced-motion, and destruction behavior.
 // Catalog prefix particles are drawn by that host; this layer draws the remainder.

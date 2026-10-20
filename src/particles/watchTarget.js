@@ -1,6 +1,5 @@
-// Skills target: "The Last Watch", a knight resting beside a campfire, from the approved
-// reference (references/claude/the_last_watch_tweak_claude_5600 (1).html). Its 5,600
-// world-space samples are baked by scripts/generate-watch-targets.mjs.
+// Skills target: "The Last Watch", a knight resting beside a campfire.
+// Its 5,600 world-space samples are stored in watch-samples.json.
 // One fixed camera, mirrored so the knight sits left of the fire. Solid parts are lit
 // by the flickering fire; flame, sparks, smoke and dust move in world space.
 // The WebGL vertex shader mirrors watchShade() exactly.

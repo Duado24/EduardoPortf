@@ -1,4 +1,4 @@
-// Contact target: a dot-matrix board (after references/claude/Contact Board (1).html).
+// Contact target: a dot-matrix board (after original prototype).
 // Every dot is one of the shared particles. Random dim letters fill the grid; the
 // message "READY TO / CONNECT?" is set at double size on desktop. The board is placed
 // per viewport inside the full-screen region Contact shares with Journey and Skills,

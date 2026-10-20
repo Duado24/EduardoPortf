@@ -48,9 +48,7 @@ and physically morph between targets, pause in hidden tabs, and reuse point
 arrays. Reduced motion defaults to static shapes. The user can explicitly
 choose Enable motion for the current visit. Pause motion remains available.
 
-See [the active brief](references/PORTFOLIO_BRIEF.md),
-[architecture](docs/IMPLEMENTATION_PLAN.md), and
-[verification](docs/PROTOTYPE_REVIEW.md).
+See the [particle architecture and verification guide](src/particles/README.md).
 
 ## Factual content and media
 
@@ -58,8 +56,8 @@ AutoCanv is a personal project/prototype. Ensign templates are Professional Work
 CyberForce is In Progress. No project adoption, achievements, certifications,
 competition results, or metrics are invented. Offline demonstration content is
 identified in the actual AutoCanv capture. The generator shows its built-in
-sample. The template image is a supplied formatter pattern preview rather than
-a live professional course. The CyberForce diagram is a conceptual responsibility
+sample. The Ensign template carousel provides interactive component previews.
+The CyberForce diagram is a conceptual responsibility
 map, not an asserted deployment topology.
 
 Private reference archives and credentials remain excluded from public files,

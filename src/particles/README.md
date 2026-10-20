@@ -29,10 +29,8 @@ opts in for this visit. Manual Pause stops rotation and makes navigation instant
 
 ## Aerostatic target
 
-`balloon-samples.json` is generated from the approved detailed HTML prototype in
-`references/claude/aerostatic_globe_detailed.html`. Run
-`node scripts/generate-balloon-targets.mjs` to regenerate it without a browser or
-additional dependencies. Its original surface-of-revolution profile and detailed
+`balloon-samples.json` stores the baked aerostatic geometry. Its
+surface-of-revolution profile and detailed
 architecture are resampled into exactly 5,600 points. Every fallback prefix retains
 all 14 feature groups; the envelope receives 67.1% of the population. Shell sampling
 uses surface area, and line sampling retains negative space. No particles are
@@ -68,8 +66,7 @@ geographic readability, and transition duration after this prototype review.
 
 ## Journey recovery and reference fidelity
 
-The supplied `references/claude/journeyConstellations.*` reference is the source
-for the 5,044 Hipparcos catalog stars, 88 constellation line sets, stereographic
+The Journey scene uses 5,044 Hipparcos catalog stars, 88 constellation line sets, stereographic
 projection, great-circle camera flights, Milky Way distribution, and stylized
 llama outlines. `JourneyScene.js` adapts its math and drawing code; it owns no RAF,
 observers, pointer handlers, or timers. Each active particle renderer drives it
@@ -114,10 +111,8 @@ physical mobile/GPU profiling.
 
 ## Skills: The Last Watch
 
-`watch-samples.json` is baked from the approved
-`references/claude/the_last_watch_tweak_claude_5600 (1).html`: its own scene
-builder and 5,600-particle tuning run once in Node via
-`node scripts/generate-watch-targets.mjs`. Samples are ordered per kind by
+`watch-samples.json` stores the baked 5,600-particle campfire scene.
+Samples are ordered per kind by
 radical inverse, so the 1,800 / 1,400 / 900 budgets are prefixes that keep the
 knight, cloak, logs, embers, stones, flame, sparks, smoke and dust.
 
@@ -130,8 +125,8 @@ flame and its light, and stokes the fire.
 
 ## Contact: the board
 
-`boardTarget.js` turns the shared particles into the dot-matrix board from
-`references/claude/Contact Board (1).html`: dim random letters, a dotted frame,
+`boardTarget.js` turns the shared particles into a dot-matrix board:
+dim random letters, a dotted frame,
 and "READY TO / CONNECT?" lit at double size on desktop. The board is rebuilt per
 viewport (24×10 cells on desktop, 12×8 on phones). The hover block snaps to a
 5×3 group of cells and glitches those letters in Peru's red and white; the

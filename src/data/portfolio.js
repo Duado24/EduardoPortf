@@ -103,7 +103,7 @@ export const journey = [
     label: 'Lima · coursework',
     compactDescription: 'International Business foundations before software engineering.',
     title: 'International Business',
-    organization: 'Lima University · Peru',
+    organization: 'Universidad de Lima · Peru',
     date: '2023',
     description:
       'Foundational coursework before transitioning toward software engineering.',
