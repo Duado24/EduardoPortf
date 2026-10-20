@@ -1,5 +1,6 @@
 import globeSamples from './globe-samples.json' with { type: 'json' }
 import balloonSamples from './balloon-samples.json' with { type: 'json' }
+import { createJourneyTarget } from './journeyTarget.js'
 import { createSymbolTarget } from './symbolTargets.js'
 import { matchBalloonToGlobe } from './aerostaticTransition.js'
 
@@ -107,7 +108,8 @@ export function createShapeTargets(count = MAX_PARTICLES) {
     home: { positions: globe, style: globeStyle },
     about: { positions: about, style: aboutStyle },
     projects: matchBalloonToGlobe(globe, { positions: projects, style: projectStyle, delays, groups, features }),
-    ...Object.fromEntries(['journey', 'skills', 'contact'].map((state) => [state, createSymbolTarget(state, count)])),
+    journey: createJourneyTarget(count),
+    ...Object.fromEntries(['skills', 'contact'].map((state) => [state, createSymbolTarget(state, count)])),
   }
 }
 

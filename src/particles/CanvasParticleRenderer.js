@@ -1,3 +1,6 @@
+import { createJourneySky } from './JourneyScene.js'
+import { SKY_STARS as STARS, CONS } from '../data/astronomyCatalog.js'
+import { journeyConstellations } from '../data/journeyConstellations.js'
 import {
   createShapeTargets,
   HOME_ROTATION_SPEED,
@@ -8,17 +11,23 @@ import { particleProgress, sampleMorph, sampleMorphValues } from './aerostaticTr
 
 // This renderer has no GPU dependency. The same points and interruption model
 // remain animated when WebGL is unavailable, including ordinary Chrome software rendering.
-export function createCanvasParticleRenderer({ canvas, container, section, motionPaused, reducedMotion, lowPower = false, onMorphFrame }) {
+export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, container, section, motionPaused, reducedMotion, lowPower = false, onMorphFrame }) {
   const context = canvas.getContext('2d', { alpha: true })
   if (!context) throw new Error('Canvas drawing is unavailable.')
   const mobile = window.matchMedia('(max-width: 760px)').matches
   const count = lowPower ? 900 : mobile ? 1200 : 1800
   const targets = createShapeTargets(count)
+  const sky = createJourneySky(skyCanvas, { stars: STARS, cons: CONS, milestones: journeyConstellations, count })
+  sky.setView(journeyView, true)
+  sky.project(targets.journey.positions, targets.journey.style)
   let currentState = visualState(section)
   const source = targets[currentState].positions.slice()
   const target = targets[currentState].positions.slice()
   const sourceStyle = targets[currentState].style.slice()
   const targetStyle = targets[currentState].style.slice()
+  const sourceSize = new Float32Array(count).fill(1)
+  const targetSize = new Float32Array(count).fill(1)
+  if (visualState(section) === 'journey') { sky.project(target, targetStyle, targetSize); sourceSize.set(targetSize) }
   const sourceDepth = new Float32Array(count * 2)
   const targetDepth = new Float32Array(count * 2)
   const delays = targets.projects.delays
@@ -68,12 +77,25 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
   let frameInterval = 1000 / 30
   let slowFrames = 0
 
+  function updateSkyTarget() {
+    if (currentState !== 'journey') return
+    sky.project(target, targetStyle, targetSize)
+  }
+  function setJourneyView(view) {
+    journeyView = view
+    sky.setView(view, paused || reduced || currentState !== 'journey')
+    updateSkyTarget()
+    draw()
+    resetAnimationClock()
+  }
+
   function canAnimate() {
-    return !disposed && !document.hidden && inViewport && !paused &&
-      (transitioning || (!reduced && (currentState === 'home' || currentState === 'projects')))
+    return !disposed && !document.hidden && (inViewport || transitioning) && !paused &&
+      (transitioning || (!reduced && (currentState === 'home' || currentState === 'projects' || currentState === 'journey' && sky.moving)))
   }
 
   function draw() {
+    sky.present(currentState === 'journey' ? (transitioning ? smoothProgress((morph - .45) / .55) : 1) : 0)
     if (disposed || document.hidden || !inViewport) return
     context.clearRect(0, 0, width, height)
     for (const bucket of buckets) bucket.length = 0
@@ -116,7 +138,7 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
       const bucket = buckets[(accent > 0.35 ? 10 : 0) + Math.min(9, Math.max(0, Math.round(opacity * 10) - 1))]
       bucket.push(width / 2 + (rotatedX * swayCosine - rotatedY * swaySine) * scale,
         height / 2 - (rotatedX * swaySine + rotatedY * swayCosine + float) * scale,
-        radius * (1 + accent * 0.2))
+        radius * (sourceSize[i] + (targetSize[i] - sourceSize[i]) * movement) * (1 + accent * 0.2))
     }
     // At most twenty fills per frame rather than changing style/filling per dot.
     for (let i = 0; i < buckets.length; i++) {
@@ -159,6 +181,7 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
     }
     lastFrame = timestamp
     const delta = Math.min(difference, 100)
+    if (currentState === 'journey' && sky.moving) { sky.update(delta / 1000); updateSkyTarget() }
     if (!reduced && (projectWeight || targetProject)) projectPhase += delta / 1000
     if (transitioning) {
       elapsed += delta
@@ -200,6 +223,8 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
   }
 
   function resize() {
+    sky.resize()
+    updateSkyTarget()
     if (disposed) return
     const bounds = container.getBoundingClientRect()
     if (!bounds.width || !bounds.height) return
@@ -224,6 +249,10 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
     sampleMorph(source, target, morph, delays, transitionDirection, source)
     sampleMorphValues(sourceStyle, targetStyle, morph, delays, transitionDirection, 2, sourceStyle)
     sampleMorphValues(sourceDepth, targetDepth, morph, delays, transitionDirection, 2, sourceDepth)
+    if (nextState === 'journey') { sky.resize(); sky.project(targets.journey.positions, targets.journey.style) }
+    sampleMorphValues(sourceSize, targetSize, morph, delays, transitionDirection, 1, sourceSize)
+    targetSize.fill(1)
+    if (nextState === 'journey') sky.project(targets.journey.positions, targets.journey.style, targetSize)
     target.set(targets[nextState].positions)
     targetStyle.set(targets[nextState].style)
     for (let i = 0; i < count; i++) {
@@ -242,7 +271,8 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
     const destinationRotation = nextState === 'home' ? lastGlobeRotation : nextState === 'projects' ? 0.35 : 0
     targetRotation = sourceRotation + Math.atan2(Math.sin(destinationRotation - sourceRotation), Math.cos(destinationRotation - sourceRotation))
     globeProjectTransition = (currentState === 'home' && nextState === 'projects') || (currentState === 'projects' && nextState === 'home')
-    transitionDirection = globeProjectTransition && !reduced ? nextState === 'projects' ? 1 : -1 : 0
+    const skyPair = currentState === 'journey' || nextState === 'journey'
+    transitionDirection = (globeProjectTransition || skyPair) && !reduced ? nextState === 'journey' || nextState === 'projects' ? 1 : -1 : 0
     currentState = nextState
     morph = 0
     elapsed = 0
@@ -259,6 +289,7 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
     if (disposed) return
     paused = nextPaused
     reduced = nextReduced
+    if (paused || reduced) { sky.setView(journeyView, true); updateSkyTarget() }
     if (paused && transitioning) finishTransition()
     else if (reduced && transitioning) {
       if (globeProjectTransition) {
@@ -295,6 +326,7 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
   function destroy() {
     if (disposed) return
     disposed = true
+    sky.destroy()
     if (frame) cancelAnimationFrame(frame)
     resizeObserver?.disconnect()
     visibilityObserver?.disconnect()
@@ -309,5 +341,5 @@ export function createCanvasParticleRenderer({ canvas, container, section, motio
   document.addEventListener('visibilitychange', visibilityChanged)
   resize()
   schedule()
-  return { setSection, setMotionPreferences, destroy, getRenderSize: () => width }
+  return { setJourneyView, setSection, setMotionPreferences, destroy, getRenderSize: () => width }
 }

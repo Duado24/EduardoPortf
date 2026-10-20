@@ -35,6 +35,7 @@ export default function App() {
   const [motionEnabled, setMotionEnabled] = useState(false);
   const reducedMotion = systemReducedMotion && !motionEnabled;
   const [motionPaused, setMotionPaused] = useState(false);
+  const [journeyView, setJourneyView] = useState({ index: 0, lang: 'en', reveal: false });
   const [rendererMode, setRendererMode] = useState('static');
   const animated = rendererMode === 'webgl' || rendererMode === 'canvas';
   const [displaySection, setDisplaySection] = useState(section);
@@ -42,11 +43,10 @@ export default function App() {
   const contentTransitionRef = useRef(null);
   const previous = previousSectionRef.current;
   const globePair = (previous === 'home' || previous === 'about') && section === 'projects' ||
-    previous === 'projects' && (section === 'home' || section === 'about');
+    previous === 'projects' && (section === 'home' || section === 'about') || previous === 'journey' || section === 'journey';
   const holdContent = previous !== section ? globePair && animated && !motionPaused && !debugBalloon : Boolean(contentTransitionRef.current);
   const visibleSection = holdContent ? displaySection : section;
   const Section = sections[visibleSection];
-
   const onTransitionProgress = useCallback((progress) => {
     const transition = contentTransitionRef.current;
     if (!transition) return;
@@ -80,7 +80,7 @@ export default function App() {
     }
     const fromGlobe = previous === 'home' || previous === 'about';
     const toGlobe = section === 'home' || section === 'about';
-    const pair = fromGlobe && section === 'projects' || previous === 'projects' && toGlobe;
+    const pair = fromGlobe && section === 'projects' || previous === 'projects' && toGlobe || previous === 'journey' || section === 'journey';
     if (pair && animated && !motionPaused && !debugBalloon) {
       contentTransitionRef.current = {
         to: section, switched: false, progress: 0,
@@ -131,6 +131,7 @@ export default function App() {
           <ParticleBoundary>
             <Suspense fallback={<div className="particle-loading" />}>
               <ParticleStage
+                journeyView={journeyView}
                 section={debugBalloon ? 'projects' : section === 'about' ? 'home' : section}
                 visualSection={debugBalloon ? 'projects' : section}
                 reducedMotion={reducedMotion}
@@ -149,7 +150,7 @@ export default function App() {
           tabIndex={-1}
           onClick={onNavigate}
         >
-          <Section />
+          <Section journeyView={journeyView} onJourneyView={setJourneyView} />
         </section>
       </main>
       <footer className="site-footer">

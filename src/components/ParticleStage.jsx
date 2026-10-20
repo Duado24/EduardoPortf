@@ -20,17 +20,18 @@ function clearPlacement(region) {
   }
 }
 
-export default function ParticleStage({ section, visualSection = section, motionPaused = false, reducedMotion = false, onRendererChange, onTransitionProgress }) {
+export default function ParticleStage({ section, journeyView, visualSection = section, motionPaused = false, reducedMotion = false, onRendererChange, onTransitionProgress }) {
   const containerRef = useRef(null)
   const placementRef = useRef(null)
   const lastBoxRef = useRef(null)
   const lastVisualSectionRef = useRef(visualSection)
   const webglCanvasRef = useRef(null)
+  const skyCanvasRef = useRef(null)
   const fallbackCanvasRef = useRef(null)
   const rendererRef = useRef(null)
   const presentationCallbackRef = useRef(onTransitionProgress)
   const placementFrameRef = useRef({})
-  const propertiesRef = useRef({ section, motionPaused, reducedMotion })
+  const propertiesRef = useRef({ section, journeyView, motionPaused, reducedMotion })
   const [status, setStatus] = useState({ mode: 'static', reason: 'loading' })
   const available = status.mode !== 'static'
 
@@ -42,7 +43,9 @@ export default function ParticleStage({ section, visualSection = section, motion
     if (!placement) return 1
     const region = containerRef.current?.parentElement
     if (!region) return 1
-    const box = placementAt(placement.from, placement.to, progress, placement.direction, placementFrameRef.current)
+    placement.progress = progress
+    const localProgress = (progress - (placement.start ?? 0)) / (1 - (placement.start ?? 0))
+    const box = placementAt(placement.from, placement.to, localProgress, placement.direction, placementFrameRef.current)
     region.style.left = '0px'
     region.style.top = '0px'
     region.style.width = `${box.backing}px`
@@ -75,17 +78,18 @@ export default function ParticleStage({ section, visualSection = section, motion
     const fromGlobe = previous === 'about' || previous === 'home'
     const toGlobe = visualSection === 'about' || visualSection === 'home'
     const pair = (fromGlobe && visualSection === 'projects') || (previous === 'projects' && toGlobe)
-    if (!pair && !interrupted) return
+    const skyPair = previous === 'journey' || visualSection === 'journey'
+    if (!pair && !skyPair && !interrupted) return
     const from = { ...lastBoxRef.current }
     region.style.transition = 'none'
     clearPlacement(region)
     const to = placementBox(region)
-    if (!motionPaused && rendererRef.current && (pair || interrupted)) {
+    if (!motionPaused && rendererRef.current && (pair || skyPair || interrupted)) {
       placementRef.current = {
         from, to,
         renderSize: rendererRef.current.getRenderSize?.() ?? from.size,
         direction: reducedMotion || !pair ? 0 : visualSection === 'projects' ? 1 : -1,
-        duration: reducedMotion ? 220 : pair ? window.matchMedia('(max-width: 760px)').matches ? 1200 : 2000 : undefined,
+        duration: reducedMotion ? 220 : (pair || skyPair) ? window.matchMedia('(max-width: 760px)').matches ? 1200 : 2000 : undefined,
       }
       onMorphFrame(0)
     } else {
@@ -97,9 +101,18 @@ export default function ParticleStage({ section, visualSection = section, motion
 
   useEffect(() => {
     function rememberPlacement() {
-      if (!placementRef.current && containerRef.current?.parentElement) {
-        lastBoxRef.current = placementBox(containerRef.current.parentElement)
-      }
+      const region = containerRef.current?.parentElement
+      if (!region) return
+      const placement = placementRef.current
+      if (placement) {
+        // Retarget placement after resizing from the currently displayed square.
+        const from = { ...lastBoxRef.current }
+        clearPlacement(region)
+        placement.to = placementBox(region)
+        placement.from = from
+        placement.start = placement.progress ?? 0
+        onMorphFrame(placement.start)
+      } else lastBoxRef.current = placementBox(region)
     }
     window.addEventListener('resize', rememberPlacement)
     const region = containerRef.current?.parentElement
@@ -108,15 +121,17 @@ export default function ParticleStage({ section, visualSection = section, motion
       window.removeEventListener('resize', rememberPlacement)
       region?.removeEventListener('transitionend', rememberPlacement)
     }
-  }, [])
+  }, [onMorphFrame])
 
   useEffect(() => {
     onRendererChange?.(status.mode)
   }, [status.mode, onRendererChange])
 
   useEffect(() => {
-    propertiesRef.current = { section, motionPaused, reducedMotion }
-  }, [section, motionPaused, reducedMotion])
+    propertiesRef.current = { section, journeyView, motionPaused, reducedMotion }
+  }, [section, journeyView, motionPaused, reducedMotion])
+
+  useEffect(() => { rendererRef.current?.setJourneyView(journeyView) }, [journeyView])
 
   useEffect(() => {
     rendererRef.current?.setMotionPreferences(motionPaused, reducedMotion)
@@ -145,6 +160,7 @@ export default function ParticleStage({ section, visualSection = section, motion
         if (!active) return
         renderer = createCanvasParticleRenderer({
           canvas: fallbackCanvasRef.current,
+          skyCanvas: skyCanvasRef.current,
           container: containerRef.current,
           ...propertiesRef.current,
           onMorphFrame,
@@ -165,6 +181,7 @@ export default function ParticleStage({ section, visualSection = section, motion
         if (!active) return
         renderer = createParticleRenderer({
           canvas: webglCanvasRef.current,
+          skyCanvas: skyCanvasRef.current,
           container: containerRef.current,
           ...propertiesRef.current,
           onMorphFrame,
@@ -190,7 +207,8 @@ export default function ParticleStage({ section, visualSection = section, motion
     <div className="particle-stage" ref={containerRef} aria-hidden="true" data-renderer={status.mode} data-renderer-reason={status.reason || undefined}>
       <canvas className="particle-canvas particle-webgl-canvas" ref={webglCanvasRef} hidden={status.mode !== 'webgl'} />
       <canvas className="particle-canvas particle-2d-canvas" ref={fallbackCanvasRef} hidden={status.mode !== 'canvas'} />
-      {!available && <StaticFallback section={section} />}
+      <canvas className="particle-canvas journey-detail-canvas" ref={skyCanvasRef} />
+      {!available && <StaticFallback section={section} journeyView={journeyView} />}
     </div>
   )
 }

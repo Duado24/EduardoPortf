@@ -1,3 +1,6 @@
+import { createJourneySky } from './JourneyScene.js'
+import { SKY_STARS as STARS, CONS } from '../data/astronomyCatalog.js'
+import { journeyConstellations } from '../data/journeyConstellations.js'
 import {
   BufferAttribute,
   BufferGeometry,
@@ -22,6 +25,8 @@ import { sampleMorph, sampleMorphValues } from './aerostaticTransition.js'
 
 const vertexShader = /* glsl */ `
   attribute vec3 aTarget;
+  attribute float aSourceSize;
+  attribute float aTargetSize;
   attribute vec2 aSourceStyle;
   attribute vec2 aTargetStyle;
   attribute vec2 aSourceDepth;
@@ -59,7 +64,7 @@ const vertexShader = /* glsl */ `
     vAccent = style.y;
     vProject = depthWeights.y;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
-    gl_PointSize = uPointSize * mix(1.0, 1.2, vAccent);
+    gl_PointSize = mix(aSourceSize, aTargetSize, m) * uPointSize * mix(1.0, 1.2, vAccent);
   }
 `
 
@@ -79,15 +84,21 @@ const fragmentShader = /* glsl */ `
   }
 `
 
-export function createParticleRenderer({ canvas, container, section, motionPaused, reducedMotion, onUnavailable, onMorphFrame }) {
+export function createParticleRenderer({ canvas, skyCanvas, journeyView, container, section, motionPaused, reducedMotion, onUnavailable, onMorphFrame }) {
   const mobile = window.matchMedia('(max-width: 760px)').matches
   const count = mobile ? MOBILE_PARTICLES : MAX_PARTICLES
   const targets = createShapeTargets(count)
+  const sky = createJourneySky(skyCanvas, { stars: STARS, cons: CONS, milestones: journeyConstellations, count })
+  sky.setView(journeyView, true)
+  sky.project(targets.journey.positions, targets.journey.style)
   const initialState = visualState(section)
   const source = targets[initialState].positions.slice()
   const target = targets[initialState].positions.slice()
   const sourceStyle = targets[initialState].style.slice()
   const targetStyle = targets[initialState].style.slice()
+  const sourceSize = new Float32Array(count).fill(1)
+  const targetSize = new Float32Array(count).fill(1)
+  if (visualState(section) === 'journey') { sky.project(target, targetStyle, targetSize); sourceSize.set(targetSize) }
   const sourceDepth = new Float32Array(count * 2)
   const targetDepth = new Float32Array(count * 2)
   const delays = targets.projects.delays
@@ -111,6 +122,8 @@ export function createParticleRenderer({ canvas, container, section, motionPause
 
   const geometry = new BufferGeometry()
   geometry.setAttribute('position', new BufferAttribute(source, 3).setUsage(DynamicDrawUsage))
+  geometry.setAttribute('aSourceSize', new BufferAttribute(sourceSize, 1).setUsage(DynamicDrawUsage))
+  geometry.setAttribute('aTargetSize', new BufferAttribute(targetSize, 1).setUsage(DynamicDrawUsage))
   geometry.setAttribute('aTarget', new BufferAttribute(target, 3).setUsage(DynamicDrawUsage))
   geometry.setAttribute('aSourceStyle', new BufferAttribute(sourceStyle, 2).setUsage(DynamicDrawUsage))
   geometry.setAttribute('aTargetStyle', new BufferAttribute(targetStyle, 2).setUsage(DynamicDrawUsage))
@@ -175,9 +188,24 @@ export function createParticleRenderer({ canvas, container, section, motionPause
   let projectIdleElapsed = 0
   let renderSize = 1
 
+  function updateSkyTarget() {
+    if (currentState !== 'journey') return
+    sky.project(target, targetStyle, targetSize)
+    geometry.attributes.aTarget.needsUpdate = true
+    geometry.attributes.aTargetStyle.needsUpdate = true
+    geometry.attributes.aTargetSize.needsUpdate = true
+  }
+  function setJourneyView(view) {
+    journeyView = view
+    sky.setView(view, paused || reduced || currentState !== 'journey')
+    updateSkyTarget()
+    draw()
+    resetAnimationClock()
+  }
+
   function canAnimate() {
-    return !disposed && !document.hidden && inViewport && !paused &&
-      (transitioning || !reduced && (currentState === 'home' || currentState === 'projects'))
+    return !disposed && !document.hidden && (inViewport || transitioning) && !paused &&
+      (transitioning || !reduced && (currentState === 'home' || currentState === 'projects' || currentState === 'journey' && sky.moving))
   }
 
   function positionProject() {
@@ -188,6 +216,7 @@ export function createParticleRenderer({ canvas, container, section, motionPause
   }
 
   function draw() {
+    sky.present(currentState === 'journey' ? (transitioning ? smoothProgress((material.uniforms.uMorph.value - .45) / .55) : 1) : 0)
     if (!disposed && !document.hidden && inViewport) renderer.render(scene, camera)
   }
 
@@ -216,6 +245,7 @@ export function createParticleRenderer({ canvas, container, section, motionPause
     }
     lastFrame = timestamp
     const delta = Math.min(difference, 100)
+    if (currentState === 'journey' && sky.moving) { sky.update(delta / 1000); updateSkyTarget() }
     if (!reduced && (projectWeight || targetProject)) projectPhase += delta / 1000
     if (transitioning) {
       elapsed += delta
@@ -266,6 +296,8 @@ export function createParticleRenderer({ canvas, container, section, motionPause
   }
 
   function resize() {
+    sky.resize()
+    updateSkyTarget()
     if (disposed) return
     const { width, height } = container.getBoundingClientRect()
     if (!width || !height) return
@@ -297,15 +329,20 @@ export function createParticleRenderer({ canvas, container, section, motionPause
     sampleMorph(source, target, uniforms.uMorph.value, delays, direction, source)
     sampleMorphValues(sourceStyle, targetStyle, uniforms.uMorph.value, delays, direction, 2, sourceStyle)
     sampleMorphValues(sourceDepth, targetDepth, uniforms.uMorph.value, delays, direction, 2, sourceDepth)
+    sampleMorphValues(sourceSize, targetSize, uniforms.uMorph.value, delays, direction, 1, sourceSize)
     globePair = (currentState === 'home' && nextState === 'projects') || (currentState === 'projects' && nextState === 'home')
-    direction = !reduced && globePair ? nextState === 'projects' ? 1 : -1 : 0
+    const skyPair = currentState === 'journey' || nextState === 'journey'
+    direction = !reduced && (globePair || skyPair) ? nextState === 'journey' || nextState === 'projects' ? 1 : -1 : 0
+    if (nextState === 'journey') { sky.resize(); sky.project(targets.journey.positions, targets.journey.style) }
+    targetSize.fill(1)
+    if (nextState === 'journey') sky.project(targets.journey.positions, targets.journey.style, targetSize)
     target.set(targets[nextState].positions)
     targetStyle.set(targets[nextState].style)
     for (let i = 0; i < count; i++) {
       targetDepth[i * 2] = nextState === 'home' ? 1 : 0
       targetDepth[i * 2 + 1] = nextState === 'projects' ? 1 : 0
     }
-    for (const name of ['position', 'aTarget', 'aSourceStyle', 'aTargetStyle', 'aSourceDepth', 'aTargetDepth']) geometry.attributes[name].needsUpdate = true
+    for (const name of ['aSourceSize', 'aTargetSize', 'position', 'aTarget', 'aSourceStyle', 'aTargetStyle', 'aSourceDepth', 'aTargetDepth']) geometry.attributes[name].needsUpdate = true
     sourceProject = projectWeight
     targetProject = nextState === 'projects' ? 1 : 0
     sourceRotation = Math.atan2(Math.sin(uniforms.uRotation.value), Math.cos(uniforms.uRotation.value))
@@ -319,7 +356,7 @@ export function createParticleRenderer({ canvas, container, section, motionPause
     elapsed = 0
     placementProgressBase = 0
     projectIdleElapsed = 0
-    transitionDuration = reduced && globePair ? 220 : durationOverride ?? (globePair ? mobile ? 1200 : 2000 : duration)
+    transitionDuration = reduced && globePair ? 220 : durationOverride ?? ((globePair || skyPair) ? mobile ? 1200 : 2000 : duration)
     transitioning = true
     placementPointScale = onMorphFrame?.(0) ?? 1
     if (paused || reduced && !globePair) finishTransition()
@@ -331,6 +368,7 @@ export function createParticleRenderer({ canvas, container, section, motionPause
     if (disposed) return
     paused = nextPaused
     reduced = nextReduced
+    if (paused || reduced) { sky.setView(journeyView, true); updateSkyTarget() }
     if (paused && transitioning) finishTransition()
     else if (reduced && transitioning) {
       if (globePair) {
@@ -374,6 +412,7 @@ export function createParticleRenderer({ canvas, container, section, motionPause
   function destroy() {
     if (disposed) return
     disposed = true
+    sky.destroy()
     if (frame) cancelAnimationFrame(frame)
     frame = 0
     resizeObserver?.disconnect()
@@ -402,5 +441,5 @@ export function createParticleRenderer({ canvas, container, section, motionPause
   resize()
   schedule()
 
-  return { setSection, setMotionPreferences, destroy, getRenderSize: () => renderSize }
+  return { setJourneyView, setSection, setMotionPreferences, destroy, getRenderSize: () => renderSize }
 }

@@ -11,7 +11,7 @@ export const mobileJourneyStarPositions = {
   'lima-education': { x: 20, y: 24, labelSide: 'right' },
   'net-axes': { x: 49, y: 41, labelSide: 'left' },
   'ensign-education': { x: 27, y: 56, labelSide: 'right' },
-  'ensign-work': { x: 69, y: 25, labelSide: 'left' },
+  'ensign-work': { x: 69, y: 12, labelSide: 'left' },
   volunteer: { x: 80, y: 62, labelSide: 'left' },
   'cyberforce-preparation': { x: 58, y: 79, labelSide: 'right' },
 };

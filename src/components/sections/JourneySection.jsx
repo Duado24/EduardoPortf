@@ -1,115 +1,48 @@
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import { journeyNodes } from '../../data/portfolio';
-import { journeyConnections, journeyStarPositions, mobileJourneyStarPositions } from '../../data/journeyLayout';
-import { useMobileLayout } from '../../hooks/useMobileLayout';
-import JourneySky from '../journey/JourneySky';
+import { journeyConstellations } from '../../data/journeyConstellations';
+import { CONS } from '../../data/astronomyCatalog';
+import './JourneySection.css';
 
-export default function JourneySection() {
-  const [selectedId, setSelectedId] = useState(journeyNodes[0].id);
-  const starRefs = useRef(new Map());
-  const mobileLayout = useMobileLayout();
-  const starPositions = mobileLayout ? mobileJourneyStarPositions : journeyStarPositions;
-  const entry = journeyNodes.find((item) => item.id === selectedId);
-  const selectedIndex = journeyNodes.findIndex((item) => item.id === selectedId);
-  const nextId = (offset) => journeyNodes[(selectedIndex + offset + journeyNodes.length) % journeyNodes.length].id;
-
-  function handleStarKeyDown(event, index) {
-    let targetIndex;
-    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') targetIndex = (index + 1) % journeyNodes.length;
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') targetIndex = (index - 1 + journeyNodes.length) % journeyNodes.length;
-    if (event.key === 'Home') targetIndex = 0;
-    if (event.key === 'End') targetIndex = journeyNodes.length - 1;
-    if (targetIndex === undefined) return;
-
-    event.preventDefault();
-    const target = journeyNodes[targetIndex];
-    setSelectedId(target.id);
-    starRefs.current.get(target.id)?.focus();
+export default function JourneySection({ journeyView, onJourneyView }) {
+  const { index, lang, reveal } = journeyView;
+  const refs = useRef([]);
+  const selected = journeyConstellations[index];
+  const entry = journeyNodes.find(node => node.id === selected.id);
+  const select = (index) => onJourneyView({ ...journeyView, index, reveal: false });
+  function keyDown(event, i) {
+    const next = { ArrowRight: (i + 1) % 6, ArrowDown: (i + 1) % 6, ArrowLeft: (i + 5) % 6, ArrowUp: (i + 5) % 6, Home: 0, End: 5 }[event.key];
+    if (next === undefined) return;
+    event.preventDefault(); select(next); refs.current[next]?.focus();
   }
-
-  return (
-    <div className="journey-composition">
-      <div className="state-introduction journey-introduction">
-        <p className="eyebrow">Peru → Utah · Work, study & service</p>
-        <h1 className="section-heading" id="section-heading" tabIndex={-1}>Journey</h1>
-        <p className="journey-lede">A constellation of experiences that brought me here.</p>
+  return <div className="journey-recovered">
+    <div className="journey-heading">
+      <p className="eyebrow">Peru &rarr; Utah &middot; Work, study &amp; service</p>
+      <h1 id="section-heading" tabIndex={-1}>Journey</h1>
+      <p>A constellation of experiences that brought me here.</p>
       </div>
-      <div className="journey-constellation-scene">
-        <JourneySky />
-        <svg className="journey-connection-art" viewBox="0 0 1000 600" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-          {journeyConnections.map(([from, to]) => {
-            const start = starPositions[from];
-            const end = starPositions[to];
-            const connected = from === selectedId || to === selectedId;
-            return (
-              <path
-                key={`${from}-${to}`}
-                className={connected ? 'is-connected' : ''}
-                d={`M ${start.x * 10} ${start.y * 6} L ${end.x * 10} ${end.y * 6}`}
-              />
-            );
-          })}
-        </svg>
-        <ol
-          className="journey-milestones"
-          aria-label="Personal milestones, arranged thematically rather than chronologically"
-          aria-describedby="journey-keyboard-help"
-        >
-          {journeyNodes.map((item, index) => {
-            const position = starPositions[item.id];
-            const selected = entry.id === item.id;
-            return (
-              <li key={item.id} style={{ '--star-x': `${position.x}%`, '--star-y': `${position.y}%` }}>
-                <button
-                  type="button"
-                  className={`journey-star journey-star--${position.labelSide}${selected ? ' is-selected' : ''}`}
-                  aria-label={`${item.title}, ${item.organization}, ${item.date}`}
-                  aria-pressed={selected}
-                  aria-controls="journey-story"
-                  tabIndex={selected ? 0 : -1}
-                  ref={(element) => element ? starRefs.current.set(item.id, element) : starRefs.current.delete(item.id)}
-                  onKeyDown={(event) => handleStarKeyDown(event, index)}
-                  onClick={() => setSelectedId(item.id)}
-                >
-                  <span className="journey-star-point" aria-hidden="true" />
-                  <span className="journey-star-label" aria-hidden="true">{item.label}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-        <p className="journey-sky-caption">Southern sky, inspired by Peru · an artistic composition, not a star chart</p>
-      </div>
-      <label className="journey-compact-control">
-        <span className="sr-only">Choose a Journey milestone</span>
-        <select value={selectedId} onChange={event => setSelectedId(event.target.value)}>
-          {journeyNodes.map(item => <option key={item.id} value={item.id}>{item.title} · {item.date}</option>)}
-        </select>
-      </label>
-      <p className="sr-only" id="journey-keyboard-help">Use the arrow keys to explore the milestone stars. Home and End move to the first and last milestone.</p>
-      <article
-        className="journey-story"
-        id="journey-story"
-        aria-labelledby="journey-story-heading"
-        aria-live="polite"
-        aria-atomic="true"
-      >
-        <div className="journey-story-heading">
-          <p className="journey-story-index">Milestone {selectedIndex + 1} / {journeyNodes.length}</p>
-          <h2 id="journey-story-heading">{entry.title}</h2>
-          <p className="journey-story-date">{entry.date}</p>
-          <p className="journey-story-organization">{entry.organization}</p>
-          <p className="journey-story-description">
-            <span className="copy-full">{entry.description}</span>
-            <span className="copy-compact">{entry.compactDescription}</span>
-          </p>
-        </div>
-        <nav className="journey-step-controls" aria-label="Journey milestone controls">
-          <button type="button" onClick={() => setSelectedId(nextId(-1))}>← Previous</button>
-          <button type="button" onClick={() => setSelectedId(nextId(1))}>Next →</button>
-        </nav>
-      </article>
-      <a className="back-home" href="#home"><span aria-hidden="true">←</span> Back to Home</a>
+    <article className="journey-card" id="journey-story" aria-live="polite" aria-atomic="true">
+      <p className="journey-card-index">0{index + 1} / 06 &nbsp; &middot; &nbsp; {lang === 'es' ? CONS[selected.con].es : CONS[selected.con].n}</p>
+      <h2>{entry.title}</h2>
+      <p className="journey-card-organization">{entry.organization}</p>
+      <p className="journey-card-date">{entry.date}</p>
+      <p className="journey-card-description">{entry.description}</p>
+      <div className="journey-card-note"><span>{selected.nick[lang]}</span><p>{selected.note}</p>
+      {reveal && <p>Yacana and Uñallamacha: stylized interpretations of the llama and baby llama in the Milky Way’s dark clouds.</p>}</div>
+    </article>
+    <nav className="journey-tabs" aria-label="Journey milestones, arranged thematically">
+      {journeyConstellations.map((item, i) => {
+        const node = journeyNodes.find(node => node.id === item.id);
+        return <button key={item.id} ref={el => { refs.current[i] = el; }} type="button" aria-pressed={i === index} aria-controls="journey-story" tabIndex={i === index ? 0 : -1} onClick={() => select(i)} onKeyDown={event => keyDown(event, i)}>
+          <span>0{i + 1} &middot; {lang === 'es' ? CONS[item.con].es : CONS[item.con].n}</span><strong>{node.title}</strong>
+        </button>;
+      })}
+    </nav>
+    <div className="journey-tools">
+      <button type="button" onClick={() => onJourneyView({ ...journeyView, lang: lang === 'en' ? 'es' : 'en' })}>Names: {lang === 'en' ? 'English' : 'Español'}</button>
+      <button type="button" aria-pressed={reveal} onClick={() => onJourneyView({ ...journeyView, index: 0, reveal: !reveal })}>{reveal ? 'Hide' : 'Reveal'} Inca dark constellations</button>
+      <details><summary>About this sky</summary><div><p>Cataloged stars and constellation lines; personal milestone associations. This is a tour of the celestial sphere, not the sky at one place or time. The dark llama outlines are stylized.</p><a href="https://www.iau.org/IAU/Astronomy-FAQs/Constellations.aspx" target="_blank" rel="noreferrer">Astronomy and cultural context: IAU</a></div></details>
     </div>
-  );
+    <a className="back-home" href="#home"><span aria-hidden="true">&larr;</span> Back to Home</a>
+  </div>;
 }
