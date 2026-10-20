@@ -269,8 +269,8 @@ export function createJourneySky(cv, opts = {}) {
     present(opacity) { cv.style.opacity = String(opacity); },
     /** 0 = Journey's view; 1 = tilted down to the Skills horizon (overlays faded). */
     setDescent(value) { const next = clamp(value, 0, 1); if (next !== descent) { descent = next; render(0); } },
-    /** Horizon line for the descent, in CSS px below the sky band's center. */
-    setHorizon(px) { if (px !== horizon) { horizon = px; if (descent > 0) render(0); } },
+    /** Horizon line for the descent, in CSS px below the sky band's center; drawn on the next redraw. */
+    setHorizon(px) { horizon = px; },
     destroy() { ctx.clearRect(0, 0, cv.width, cv.height); },
   };
 }

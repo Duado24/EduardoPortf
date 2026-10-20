@@ -183,7 +183,7 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
   const mobile = window.matchMedia('(max-width: 760px)').matches
   const count = mobile ? MOBILE_PARTICLES : MAX_PARTICLES
   const targets = createShapeTargets(count)
-  let placement = watchLayout({ width: window.innerWidth, height: window.innerHeight, side: container.getBoundingClientRect().width || window.innerWidth })
+  let placement = watchLayout({ width: window.innerWidth, height: window.innerHeight })
   placeWatch(placement, targets.skills.positions)
   const sky = createJourneySky(skyCanvas, { stars: STARS, cons: CONS, milestones: journeyConstellations, count })
   sky.setView(journeyView, true)
@@ -364,9 +364,7 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
   }
 
   function placeSkills() {
-    const side = container.getBoundingClientRect().width
-    if (!side) return
-    placement = watchLayout({ width: window.innerWidth, height: window.innerHeight, side })
+    placement = watchLayout({ width: window.innerWidth, height: window.innerHeight })
     placeWatch(placement, targets.skills.positions)
     material.uniforms.uWatchLayout.value.set(placement.x, placement.y, placement.scale)
     sky.setHorizon(placement.horizon)
@@ -474,6 +472,8 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
   }
 
   function resize() {
+    // Before the sky redraw, so it draws the new horizon once.
+    placeSkills()
     sky.resize()
     updateSkyTarget()
     if (disposed) return
@@ -496,7 +496,6 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
     positionProject()
     geometry.setDrawRange(0, Math.min(performanceDrawLimit, narrow ? MOBILE_PARTICLES : count))
     duration = narrow ? 450 : 1000
-    placeSkills()
     draw()
   }
 
@@ -511,13 +510,16 @@ export function createParticleRenderer({ canvas, skyCanvas, journeyView, contain
     sampleMorphValues(sourceSize, targetSize, uniforms.uMorph.value, delays, direction, 1, sourceSize)
     globePair = (currentState === 'home' && nextState === 'projects') || (currentState === 'projects' && nextState === 'home')
     const skyPair = SKY_STATES.includes(currentState) || SKY_STATES.includes(nextState)
-    direction = !reduced && (globePair || skyPair) ? ['journey', 'skills', 'projects'].includes(nextState) ? 1 : -1 : 0
+    // Staggered (delayed) morphs belong to the globe ↔ balloon pair and to Journey's sky;
+    // Skills ↔ any other section morphs all at once so nothing hangs on the old shape.
+    const staggered = globePair || skyPair && (currentState === 'journey' || nextState === 'journey')
+    direction = !reduced && staggered ? ['journey', 'skills', 'projects'].includes(nextState) ? 1 : -1 : 0
     // Journey → Skills tilts the view down to the horizon; Skills → Journey looks back up.
     descentSign = reduced ? 0 : currentState === 'journey' && nextState === 'skills' ? 1 : currentState === 'skills' && nextState === 'journey' ? -1 : 0
+    if (nextState === 'skills') placeSkills()
     if (!descentSign && SKY_STATES.includes(nextState)) sky.setDescent(nextState === 'skills' ? 1 : 0)
     material.uniforms.uSourceLift.value = 0
     material.uniforms.uTargetLift.value = 0
-    if (nextState === 'skills') placeSkills()
     if (nextState === 'journey') { sky.resize(); sky.project(targets.journey.positions, targets.journey.style) }
     targetSize.fill(1)
     if (nextState === 'skills') targetSize.set(targets.skills.sizes)

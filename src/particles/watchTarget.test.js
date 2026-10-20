@@ -12,7 +12,7 @@ test('every Skills budget keeps each part of the scene, from the knight to the s
 })
 
 test('the knight sits left of the fire and the scene fits the region on desktop and phones', () => {
-  for (const viewport of [{ width: 1440, height: 810, side: 1440 }, { width: 390, height: 844, side: 400 }]) {
+  for (const viewport of [{ width: 1440, height: 810 }, { width: 390, height: 844 }]) {
     const layout = watchLayout(viewport)
     const { positions, watchA } = createWatchTarget(5600, layout)
     placeWatch(layout, positions)

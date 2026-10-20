@@ -22,7 +22,7 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
   const mobile = window.matchMedia('(max-width: 760px)').matches
   const count = lowPower ? 900 : mobile ? 1200 : 1800
   const targets = createShapeTargets(count)
-  let placement = watchLayout({ width: window.innerWidth, height: window.innerHeight, side: container.getBoundingClientRect().width || window.innerWidth })
+  let placement = watchLayout({ width: window.innerWidth, height: window.innerHeight })
   placeWatch(placement, targets.skills.positions)
   const { watchA, watchB } = targets.skills
   const shade = [0, 0, 1, 1, 0]
@@ -125,8 +125,7 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
   }
 
   function placeSkills() {
-    if (!width) return
-    placement = watchLayout({ width: window.innerWidth, height: window.innerHeight, side: width })
+    placement = watchLayout({ width: window.innerWidth, height: window.innerHeight })
     placeWatch(placement, targets.skills.positions)
     sky.setHorizon(placement.horizon)
     if (currentState === 'skills') target.set(targets.skills.positions)
@@ -311,6 +310,8 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
   }
 
   function resize() {
+    // Before the sky redraw, so it draws the new horizon once.
+    placeSkills()
     sky.resize()
     updateSkyTarget()
     if (disposed) return
@@ -365,7 +366,10 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
     targetRotation = sourceRotation + Math.atan2(Math.sin(destinationRotation - sourceRotation), Math.cos(destinationRotation - sourceRotation))
     globeProjectTransition = (currentState === 'home' && nextState === 'projects') || (currentState === 'projects' && nextState === 'home')
     const skyPair = SKY_STATES.includes(currentState) || SKY_STATES.includes(nextState)
-    transitionDirection = (globeProjectTransition || skyPair) && !reduced ? ['journey', 'skills', 'projects'].includes(nextState) ? 1 : -1 : 0
+    // Staggered (delayed) morphs belong to the globe ↔ balloon pair and to Journey's sky;
+    // Skills ↔ any other section morphs all at once so nothing hangs on the old shape.
+    const staggered = globeProjectTransition || skyPair && (currentState === 'journey' || nextState === 'journey')
+    transitionDirection = staggered && !reduced ? ['journey', 'skills', 'projects'].includes(nextState) ? 1 : -1 : 0
     // Journey → Skills tilts the view down to the horizon; Skills → Journey looks back up.
     descentSign = reduced ? 0 : currentState === 'journey' && nextState === 'skills' ? 1 : currentState === 'skills' && nextState === 'journey' ? -1 : 0
     if (!descentSign && SKY_STATES.includes(nextState)) sky.setDescent(nextState === 'skills' ? 1 : 0)
@@ -375,7 +379,7 @@ export function createCanvasParticleRenderer({ canvas, skyCanvas, journeyView, c
     morph = 0
     elapsed = 0
     placementProgressBase = 0
-    transitionDuration = reduced && globeProjectTransition ? 220 : durationOverride ?? (transitionDirection ? mobile ? 1200 : 2000 : duration)
+    transitionDuration = reduced && globeProjectTransition ? 220 : durationOverride ?? ((globeProjectTransition || skyPair) ? mobile ? 1200 : 2000 : duration)
     transitioning = true
     placementPointScale = onMorphFrame?.(0) ?? 1
     if (paused || (reduced && !globeProjectTransition)) finishTransition()

@@ -40,7 +40,7 @@ export default function SkillsSection({ onSkillFlame }) {
         <p className="campfire-lede">A quiet checkpoint to rest, sharpen the tools, and choose what comes next.</p>
       </div>
       <div className="campfire-inventory">
-        <p className="campfire-inventory-head"><span>Inventory</span><span>{pad(skillGroups.length)}</span></p>
+        <p className="campfire-inventory-head"><span>My skills inventory</span><span>{pad(skillGroups.length)}</span></p>
         <div className="campfire-tabs" role="tablist" aria-label="Skill categories" aria-orientation="vertical">
           {skillGroups.map((entry, index) => (
             <button

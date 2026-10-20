@@ -85,15 +85,20 @@ const BOX_HEIGHT = BOX[3] - BOX[1]
 const BOX_CENTER = [(BOX[0] + BOX[2]) / 2, (BOX[1] + BOX[3]) / 2]
 
 /**
- * Where the scene sits in the shared camera (±1.2 across the square region of `side`
- * CSS px, centered on the viewport). Desktop: between the intro and the inventory, low
- * in the frame. Phones: full width, in the lower half of the 400px sky band. Returns
- * offset and scale (camera units per view unit), the sky horizon (CSS px below the
- * band center) and the descent lift (camera units).
+ * Where the scene sits in the shared camera (±1.2 across the square sky region,
+ * centered on the viewport). Desktop: between the intro and the inventory, low in the
+ * frame. Phones: full width, in the lower half of the 400px sky band. Returns offset
+ * and scale (camera units per view unit), the sky horizon (CSS px below the band
+ * center) and the descent lift (camera units).
+ *
+ * The region's size comes from the viewport, matching SkillsSection.css, never from
+ * the live element: during arrival that element is still animating from the previous
+ * section's square.
  */
-export function watchLayout({ width, height, side }) {
+export function watchLayout({ width, height }) {
   const ratio = BOX_WIDTH / BOX_HEIGHT
   const mobile = width <= 760
+  const side = mobile ? Math.max(width, 400) : Math.max(width, height)
   let span, offsetX, offsetY
   if (mobile) {
     span = Math.min(width * 0.96, 270 * ratio)
@@ -136,7 +141,7 @@ export function placeWatch(layout, positions) {
  * Prefix of `count` samples (the baked order keeps every prefix representative).
  * `watchA` = kind, seed, tone, static light; `watchB` = world xyz, signed depth alpha.
  */
-export function createWatchTarget(count, layout = watchLayout({ width: 1440, height: 810, side: 1440 })) {
+export function createWatchTarget(count, layout = watchLayout({ width: 1440, height: 810 })) {
   if (count > TOTAL) throw new RangeError('The Last Watch has 5,600 samples.')
   const positions = new Float32Array(count * 3)
   const style = new Float32Array(count * 2)
